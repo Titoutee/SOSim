@@ -1,6 +1,6 @@
 # SOSim (StackOverflow Sim)
 
-#### SOS, I needed simulated paging-based allocation machinery for playing with different stack-overflow attack patterns in my "TIPE"'s context!
+#### SOS, I needed simulated paging-based allocation machinery for playing with different buffer-overflow attack patterns in my "TIPE"'s context!
 
 This repo is officially supposed to be an extraction from the paging-based mem-alloc mechanisms taken out of my recent operating system project [BurritOS](https://github.com/Titoutee/BurritOS), which was entirely designed following [Oppermann's Article on Writing an OS in Rust](https://os.phil-opp.com/), unlike being implemented as a virtual machine rather than a `no_std` micro-kernel. It exists for the sake of next year's competitive oral exam, for which I chose to opt for the presentation, demonstration and solving of buffer-overflow-related issues. Thus, beyond its stupid name, **it will indeed not focus strictly on s-o attacks, but on more general-class b-o exploits**.
 
