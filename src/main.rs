@@ -1,7 +1,7 @@
-use sosim::{fault, allocator, mem::{addr::Addr, paging::PTEntry}};
+use sosim::{fault, allocator, mem::{addr::Addr, paging::{FullPTEntry}}};
 use std::{mem::size_of};
 
 fn main() {
-    println!("{}", size_of::<PTEntry>());    
-    println!("align of S: {}", std::mem::align_of::<PTEntry>());
+    println!("{}", size_of::<FullPTEntry>());    
+    println!("align of S: {}", std::mem::align_of::<FullPTEntry>());
 }

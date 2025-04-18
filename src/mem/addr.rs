@@ -1,4 +1,6 @@
-// General purpose thin-wrapper
+use super::{BitMode};
+
+// General purpose address thin-wrapper
 pub struct Addr {
     inner: u32, // (!)
 }
@@ -17,10 +19,9 @@ impl _VAddrRawCtxt {
             sign_ext,
         }
     }
-    // pub fn from_offset()
 }
 
-// V-addresses are split into PT level fields, some of which may be disabled for a given setup/arch,
+// V-addresses are split into page table level fields, some of which may be disabled for a given setup/arch,
 // and an offset for in-page inedexing.
 
 pub struct VAddr {
@@ -50,10 +51,12 @@ impl VAddr {
     }
 
     // Context-wise
-    // TODO: adapt to all bitsizes
-    pub fn from_raw_addr(_raw: u64) -> Self {
-        let lvl_mask = 0b111111111;
-        let off_mask = 0b111111111111;
+    // (!)
+    /// Creates a VAddr from the raw field-cut format bit-set, in a manner depending on the running bitmode
+    pub fn from_raw_addr(_raw: u64/*(!)*/) -> Self {
+        // Sign extension is ignored and does not produce any error if incorrect (aka if not copy of MSB)
+        let lvl_mask = 0b111111111; // (!)
+        let off_mask = 0b111111111111; // (!)
 
         let offset = Some((_raw & off_mask) as u16);
         let lvl1 = Some((_raw >> (9) & lvl_mask) as u16);
@@ -67,6 +70,7 @@ impl VAddr {
             lvl3,
             lvl4,
             offset,
+            //
         }
     }
 }

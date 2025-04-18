@@ -1,4 +1,4 @@
-// Every bit marked with (!) means more versatility or details will 
+// Every bit marked with (!) means more versatility (bitmode, architecture variations) or details will 
 // be given in the future to this piece of functionality.
 
 pub mod mem;
