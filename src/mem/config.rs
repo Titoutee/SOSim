@@ -1,4 +1,4 @@
-use super::BitMode;
+use crate::mem::BitMode;
 
 // main
 pub const _PTE_LEN: u8 = 64;
@@ -8,33 +8,81 @@ pub const _PTE_LEN: u8 = 64;
 // The unary mask will be used for `present` & `writable` at most.
 // /!\ The PTE format is still 64b, to stick to reality.
 
-// Masks are used in to parse the format in this exact order, as they are listed here in the LSB->MSB way.
+//// Masks are used in to parse the format in this exact order, as they are listed here in the LSB->MSB way.
 
-// pub const PTE_free_os_mask: u8 = 0b111;
+// pub const PTE_P_MASK: u64 = 0b1;
+// pub const PTE_W_MASK: u64 = 0b1;
+// pub const PTE_R_MASK: u64 = 0b1;
 pub const PTE_PHYS_ADDR_MASK: u64 = 0b1111111111111111111111111111111111111111111111111111;
 
 // 8-bit
-// pub const _8b_lvl_mask: u16 =
-// pub const _8b_lvl_mask: u16 =
+#[cfg(feature = "bit8")]
+pub mod bitmode {
+    use super::BitMode;
+    pub const _BIT_MODE: BitMode = BitMode::Bit32;
+    pub const _LVL_MASK: u16 = 0b111111111;
+    pub const _OFF_MASK: u16 = 0b111111111111;
+    pub const _PAGE_SIZE: u32 = 4 * 1024;
+    pub const _PAGE_COUNT: u16 = 512;
+    pub const _MULTI_LEVEL: bool = true;
+    pub const _PT_LEVELS: u8 = 4;
+    pub const _V_ADDR_LVL_LEN: u8 = 9;
+    pub const _V_ADDR_OFF_LEN: u8 = 12;
+    pub const _PHYS_BITW: u8 = 128;
+}
 
 // 16-bit
-// pub const _16b_lvl_mask: u16 =
-// pub const _16b_lvl_mask: u16 =
+#[cfg(feature = "bit16")]
+pub mod bitmode {
+    use super::BitMode;
+    pub const _BIT_MODE: BitMode = BitMode::Bit32;
+    pub const _LVL_MASK: u16 = 0b111111111;
+    pub const _OFF_MASK: u16 = 0b111111111111;
+    pub const _PAGE_SIZE: u32 = 4 * 1024;
+    pub const _PAGE_COUNT: u16 = 512;
+    pub const _MULTI_LEVEL: bool = true;
+    pub const _PT_LEVELS: u8 = 4;
+    pub const _V_ADDR_LVL_LEN: u8 = 9;
+    pub const _V_ADDR_OFF_LEN: u8 = 12;
+    pub const _PHYS_BITW: u8 = 128;
+}
 
 // 32-bit
-// pub const _32b_lvl_mask: u16 =
-// pub const _32b_lvl_mask: u16 =
+#[cfg(feature = "bit32")]
+pub mod bitmode {
+    use super::BitMode;
+    pub const _BIT_MODE: BitMode = BitMode::Bit64;
+    pub const _LVL_MASK: u16 = 0b111111111;
+    pub const _OFF_MASK: u16 = 0b111111111111;
+    pub const _PAGE_SIZE: u32 = 4 * 1024;
+    pub const _PAGE_COUNT: u16 = 0;
+    pub const _MULTI_LEVEL: bool = true;
+    pub const _PT_LEVELS: u8 = 4;
+    pub const _V_ADDR_LVL_LEN: u8 = 9;
+    pub const _V_ADDR_OFF_LEN: u8 = 12;
+    pub const _PHYS_BITW: u8 = 128;
+}
 
 // 64-bit
-pub const _64_LVL_MASK: u16 = 0b111111111;
-pub const _64_OFF_MASK: u16 = 0b111111111111;
-pub const _64_PAGE_SIZE: u32 = 4 * 1024;
-pub const _64_PAGE_COUNT: u16 = 512;
-pub const _64_MULTI_LEVEL: bool = true;
-pub const _64_PT_LEVELS: u8 = 4;
-pub const _64_V_ADDR_LVL_LEN: u8 = 9;
-pub const _64_V_ADDR_OFF_LEN: u8 = 12;
-pub const _64_PHYS_BITW: u8 = 128;
+#[cfg(feature = "bit64")]
+pub mod bitmode {
+    use super::BitMode;
+    pub const _BIT_MODE: BitMode = BitMode::Bit32;
+    pub const _LVL_MASK: u16 = 0b111111111;
+    pub const _OFF_MASK: u16 = 0b111111111111;
+    pub const _PAGE_SIZE: u32 = 4 * 1024;
+    pub const _PAGE_COUNT: u16 = 512;
+    pub const _MULTI_LEVEL: bool = true;
+    pub const _PT_LEVELS: u8 = 4;
+    pub const _V_ADDR_LVL_LEN: u8 = 9;
+    pub const _V_ADDR_OFF_LEN: u8 = 12;
+    pub const _PHYS_BITW: u8 = 128;
+}
+
+#[cfg(feature = "bit64")]
+pub use bitmode as paging_consts;
+#[cfg(feature = "bit32")]
+pub use bitmode as paging_consts;
 
 pub struct MemContext {
     lvl_mask: u16,
@@ -74,28 +122,18 @@ impl MemContext {
         }
     }
 
-    fn from_bit_mode(bmode: BitMode) -> Self {
-        match bmode {
-            BitMode::Bit8 => {
-                todo!()
-            }
-            BitMode::Bit16 => {
-                todo!()
-            }
-            BitMode::Bit32 => {
-                todo!()
-            }
-            BitMode::Bit64 => Self {
-                lvl_mask: _64_LVL_MASK,
-                off_mask: _64_OFF_MASK,
-                page_size: _64_PAGE_SIZE,
-                page_count: _64_PAGE_COUNT,
-                multilevel: _64_MULTI_LEVEL,
-                pt_levels: _64_PT_LEVELS,
-                v_addr_lvl_len: _64_V_ADDR_LVL_LEN,
-                v_addr_off_len: _64_V_ADDR_OFF_LEN,
-                phys_bitw: _64_PHYS_BITW,
-            },
+    fn from_bit_mode__compiled() -> Self {
+        use paging_consts::*;
+        Self {
+            lvl_mask: _LVL_MASK,
+            off_mask: _OFF_MASK,
+            page_size: _PAGE_SIZE,
+            page_count: _PAGE_COUNT,
+            multilevel: _MULTI_LEVEL,
+            pt_levels: _PT_LEVELS,
+            v_addr_lvl_len: _V_ADDR_LVL_LEN,
+            v_addr_off_len: _V_ADDR_OFF_LEN,
+            phys_bitw: _PHYS_BITW,
         }
     }
 }

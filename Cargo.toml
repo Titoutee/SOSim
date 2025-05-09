@@ -3,5 +3,12 @@ name = "sosim"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+bit8 = []
+bit16 = []
+bit32 = []
+bit64 = []
+default = ["bit64"]  # Optional: pick one as default
+
 [dependencies]
 num = "0.4.3"

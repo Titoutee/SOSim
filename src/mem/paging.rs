@@ -1,4 +1,4 @@
-// PTE format does not exactly match the x86_64 standard, as only write and read, as well as address payload is are serialized
+// PTE format does not exactly match the x86_64 standard, as only present, write, read bits and the address payload is are serialized
 // into the 64b bitset.
 
 use super::{
@@ -8,21 +8,33 @@ use super::{
 use config::PTE_PHYS_ADDR_MASK;
 // use num::{BigUint, PrimInt, Integer};
 
-pub struct RawPTE {
+pub struct RawPTEntry {
     bitset: u64, // std bitset for PTE format in x86_64 is 64 bit long
 }
 
-impl RawPTE {
+impl RawPTEntry {
     pub fn new(bitset: u64) -> Self {
         Self { bitset }
     }
 }
 
+#[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct FullPTEntry {
     present: bool,
     write: bool,
     read: bool,
     phys_addr: u64,
+}
+
+impl FullPTEntry {
+    pub fn new(present: bool, write: bool, read: bool, phys_addr: u64) -> Self {
+        Self {
+            present,
+            write,
+            read,
+            phys_addr
+        }
+    }   
 }
 
 trait _From<T> {
@@ -48,8 +60,8 @@ impl _Into<u64> for bool {
 }
 
 //// RawPTE <-> FullPTE
-impl From<RawPTE> for FullPTEntry {
-    fn from(r: RawPTE) -> Self {
+impl From<RawPTEntry> for FullPTEntry {
+    fn from(r: RawPTEntry) -> Self {
         let bits = r.bitset;
 
         let present = <bool as _From<u64>>::_from(bits & 0b1);
@@ -69,12 +81,12 @@ impl From<RawPTE> for FullPTEntry {
 
 pub struct PageTable {
     // PTEs are hard-indexed, which means the index part (9 bit for 64-bit v-addr) in the v-addr is directly used to access the appropriate PTE
-    arr: [RawPTE; 512], // (!)
+    arr: [RawPTEntry; 512], // (!)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{_From, _Into};
+    use super::{FullPTEntry, RawPTEntry, _From, _Into};
 
     #[test]
     fn bool_from_u64() {
@@ -92,7 +104,29 @@ mod tests {
     }
 
     #[test]
-    fn fpte_from_raw() {
+    fn fpte_from_raw_pwr() {
+        let raw = 0b10111; // Auto extension
+        let rawpte = RawPTEntry::new(raw);
+        let fpte = FullPTEntry::from(rawpte);
+        let comp = FullPTEntry::new(true, true, true, 0b10);
+        assert_eq!(comp, fpte);
+    }
 
+    #[test]
+    fn fpte_from_raw_p() {
+        let raw = 0b10001; // Auto extension
+        let rawpte = RawPTEntry::new(raw);
+        let fpte = FullPTEntry::from(rawpte);
+        let comp = FullPTEntry::new(true, false, false, 0b10);
+        assert_eq!(comp, fpte);
+    }
+
+    #[test]
+    fn fpte_from_raw_pr() {
+        let raw = 0b10101; // Auto extension
+        let rawpte = RawPTEntry::new(raw);
+        let fpte = FullPTEntry::from(rawpte);
+        let comp = FullPTEntry::new(true, false, true, 0b10);
+        assert_eq!(comp, fpte);
     }
 }

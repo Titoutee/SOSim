@@ -4,3 +4,4 @@
 pub mod mem;
 pub mod fault;
 pub mod allocator;
+pub mod proc;
