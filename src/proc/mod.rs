@@ -1,6 +1,6 @@
 //! Processes
 
-use super::{mem::paging::PageTable};
+use super::{paging::PageTable};
 
 pub struct ProcContext {
     //dummy

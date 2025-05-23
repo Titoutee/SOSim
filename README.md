@@ -25,17 +25,34 @@ SOSim is intended to be implemented as a simplist virtual machine exposing mem-a
 Paging is implemented at hand in a very simplistic way, in the most naive way possible, given the fact that mem-virtualization is not at the core of the presentation (albeit being breifly described for a thorough understanding
 of the main concept).
 
-For now, any form of DRAM access optimization pattern (TLBs, ...) detail is put apart.
+For now, any form of DRAM access optimization and protection pattern (TLBs, swapping mechanisms, ...) detail is put apart.
 
 [More about paging and related mechanisms](https://pages.cs.wisc.edu/~remzi/OSTEP/#book-chapters)
 
 **/!\\**
-*The simulator does not include CPU emulation; it only serves as a memory simulator*.
+_**The simulator does not include CPU emulation; it only serves as a memory simulator.**_
 
 _Implementation details will be further documented_
 
 ### Using the Simulator
 
+#### Default instances
+Default configs for **4** different bitmodes are provided as part of `/bitmodes`, and **should not be modified for the proper function of the simulation in these configurations** unless coherence is guaranteed and you know what you are doing.
+Alternatively, custom field-matching configurations may still be used.
+
+#### Launching the simulator
+Launching a pre-baked instance:
+
+```zsh
+cargo run --no-default-features --features bitXX
+```
+
+Launching a custom instance:
+```zsh
+cargo run /*TODO*/
+```
+
+Launching 
 _Implementation details will be further documented_
 
 ### Architectures
@@ -57,6 +74,8 @@ Here are referenced the different paging contexts for each bitmode (_64-bit_ sti
 | **64-bit**   |512|4KB|4|9b|12b|
 
 ### Address format specification (virtual)
+
+*Each generated address is 64-bit sign-extended, and the sign extension is adjusted according to the bitmode*
 
 | Bits |  Name  | Meaning |
 |:-----|:------:|:-------:|
