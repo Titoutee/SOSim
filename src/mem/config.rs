@@ -29,7 +29,7 @@ pub mod bitmode {
     pub const _V_ADDR_LVL_LEN: u8 = 9;
     pub const _V_ADDR_OFF_LEN: u8 = 12;
     pub const _PHYS_BITW: u8 = 128;
-    pub const _PTE_PHYS_ADDR_FR_MASK: u64 = 0b111111111111111111111111111111111111111111111111111; // 61b 
+    pub const _PTE_PHYS_ADDR_FR_MASK: u64 = 0b111111111111111111111111111111111111111111111111111; // 61b
 }
 
 // (!)

@@ -20,19 +20,19 @@ SOSim is intended to be implemented as a simplist virtual machine exposing mem-a
 
 ### What does SOSim simulate?
 
-**A DRAM bank with an address space size ranging from 8-bit to 64-bit addressing** is simulated, to expose a versatile set of mechanisms, trying to get near real-world architectures (e.g. SOSim can emulate a _64-bit v-address space_ and _4-level page tables_ as in _x86\_64_).
+**A RAM bank with an address space size ranging from 8-bit to 64-bit addressing** is simulated, to expose a versatile set of mechanisms, trying to get near real-world architectures (e.g. SOSim can emulate a _64-bit v-address space_ and _4-level page tables_ as in _x86\_64_).
 
 Paging is implemented at hand in a very simplistic way, in the most naive way possible, given the fact that mem-virtualization is not at the core of the presentation (albeit being breifly described for a thorough understanding
 of the main concept).
 
-For now, any form of DRAM access optimization and protection pattern (TLBs, swapping mechanisms, ...) detail is put apart.
+For now, any form of DRAM access optimization and protection pattern (TLBs, swapping mechanisms, ...) and other subtilities (time-sync, delaying, word alignment, ...) detail is put apart.
+
+One example direct consequence is that memory words' length is statically defined as `8-bit` wide, no matter the surrounding memory configuration.
 
 [More about paging and related mechanisms](https://pages.cs.wisc.edu/~remzi/OSTEP/#book-chapters)
 
 **/!\\**
 _**The simulator does not include CPU emulation; it only serves as a memory simulator.**_
-
-_Implementation details will be further documented_
 
 ### Using the Simulator
 
@@ -52,7 +52,6 @@ Launching a custom instance:
 cargo run /*TODO*/
 ```
 
-Launching 
 _Implementation details will be further documented_
 
 ### Architectures

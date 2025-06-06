@@ -2,10 +2,11 @@
 
 pub mod addr;
 pub mod config;
+pub mod stack;
 
 use std::fs;
 
-use super::paging::{PTEntry, PageTable, RawPTEntry};
+use addr::{Addr, VirtualAddress};
 use config::bitmode;
 use serde::Deserialize;
 use serde_json;
@@ -33,6 +34,24 @@ pub enum BitMode {
     Bit64,
 }
 
+#[derive(Debug)]
+pub struct MemoryRegion {
+    pub start: Addr,
+    pub size: usize,
+    pub name: String,
+    // pub is_guard: bool // guarding is located within paging mechanisms
+}
+
+#[derive(Debug)]
+pub struct Ram {
+    pub memory: Vec<u8>, // Mem words are 8-bit wide
+    pub size: usize,
+}
+
+impl Ram {}
+
+/// Machine memory context, referencing bitmode, several paging masks and information about the paging machine
+/// preset according to the bitmode.
 #[derive(Deserialize, Debug, PartialEq, Eq)]
 pub struct MemContext {
     bitmode: BitMode,
@@ -76,16 +95,22 @@ impl MemContext {
     }
 
     pub fn new() -> Self {
-        MemContext::from_bit_mode__compiled()
+        MemContext::_from_bit_mode_compiled()
     }
 
+    /// Parse a memory context from a json configuration referencing the different fields of `MemContext`.
+    ///
+    /// Substitution to `_from_bit_mode_compiled`.
     pub fn from_json(path: &str) -> Result<MemContext, serde_json::Error> {
         let json: String = fs::read_to_string(path).unwrap();
         let ctxt: MemContext = serde_json::from_str(&json)?;
         Ok(ctxt)
     }
 
-    pub const fn from_bit_mode__compiled() -> Self {
+    /// Use the conditionally-compiled paging constants to returned a fresh, pre-configured memory context.
+    ///
+    /// Relevant magic values can be found at `./config.rs`.
+    pub const fn _from_bit_mode_compiled() -> Self {
         use bitmode::*;
 
         Self {
@@ -109,7 +134,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "bit64")]
-    fn from_yam_64b() {
+    fn from_js_64b() {
         use super::JSON_PREFIX;
 
         let memctxt = MemContext::new(); // Set for 64b
@@ -122,7 +147,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "bit32")]
-    fn from_yam_32b() {
+    fn from_js_32b() {
         use super::JSON_PREFIX;
         println!("{}", JSON_PREFIX);
         let memctxt = MemContext::new(); // Set for 32b
@@ -134,7 +159,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "bit16")]
-    fn from_yam_16b() {
+    fn from_js_16b() {
         use super::JSON_PREFIX;
 
         let memctxt = MemContext::new(); // Set for 16b
@@ -146,7 +171,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "bit8")]
-    fn from_yam_8b() {
+    fn from_js_8b() {
         use super::JSON_PREFIX;
 
         let memctxt = MemContext::new(); // Set for 8b
