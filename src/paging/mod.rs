@@ -1,21 +1,18 @@
+use std::ops::Add;
+
 // PTE format does not exactly match the x86_64 standard, as only present, write, read bits and the address payload is are serialized
 // into the 64b bitset.
-pub use crate::ext;
-use crate::mem::config::bitmode::_PAGE_COUNT;
-
-use super::mem::{
-    addr::{Addr, VirtualAddress},
-    config::bitmode::_PTE_PHYS_ADDR_FR_MASK,
-};
-pub use ext::{_From, _Into};
+use super::mem::addr::{Addr, VirtualAddress};
+pub use crate::ext::{_From, _Into};
+use crate::mem::{addr, config::bitmode::{_PAGE_COUNT, _PTE_PHYS_ADDR_FR_MASK}, Region};
 
 /// A pagetable consisting of a capacity-cap-ed collection of pagetable entries (see `PTEntry`).
-///
+/// 
 /// Off entries, for unallocated pages, are `None`, but this state is not guaranteed at the initialisation time by
 /// `new_init`, which simply returns a table with a capacity of `_PAGE_COUNT`.
 pub struct PageTable {
     // PTEs are hard-indexed, which means the index part (9 bit for 64-bit v-addr) in the v-addr is directly used to access the appropriate PTE
-    arr: Vec<Option<PTEntry>>, // /!\ !pub for API instanciation only
+    arr: Vec<Option<PTEntry>>, // /!\ pub for API instanciation only
 }
 
 impl PageTable {
@@ -23,7 +20,8 @@ impl PageTable {
     //     PageTable { arr: vec![] }
     // }
 
-    /// Inits the pagetable with an inner vector of capacity `_PAGE_COUNT`.
+    /// Initiliases the pagetable with an inner vector of capacity `_PAGE_COUNT`.
+    /// This capacity should be kept untouched, as specified by the config's page table length.
     pub fn new_init() -> Self {
         PageTable {
             arr: Vec::with_capacity(_PAGE_COUNT as usize),
@@ -43,7 +41,7 @@ impl PageTable {
     }
 
     /// Retrieves the physical frame base address for the PTE at add `at_addr`.
-    /// 
+    ///
     /// This is the only step within the translation process which includes interaction which the pagetable.
     pub fn _get_frame_addr(&self, at_addr: Option<u16>) -> Option<Addr> {
         Some(
@@ -53,6 +51,14 @@ impl PageTable {
                 .into(),
         ) // (!)
     }
+
+    pub fn translation(&self, vaddr: VirtualAddress) {}
+}
+
+pub struct AddrInfo<'a> {
+    at_vpage: &'a Page,
+    // at_pframe: &'a Page, // pframe is calculated with translation, rather than stored
+    region: Region,
 }
 
 /// Multilevel page table, used by default by `64b` config.
@@ -60,7 +66,15 @@ pub struct PageDirectory {
     levels: [Option<PageTable>; 4],
 }
 
+/// Is used both as physical frames and virtual pages
+#[derive(Debug)]
+pub struct Page {
+    bottom: Addr,
+    top: Addr, // top is exclusive 
+}
+
 // Used for pretending to be x86
+/// A RawPTEntry is really just a bitset encoding the specified bits and payloads.
 pub struct RawPTEntry {
     bitset: u64, // std bitset for PTE format in x86_64 is 64 bit long
 }

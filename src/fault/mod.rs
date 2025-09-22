@@ -2,15 +2,14 @@
 
 use crate::mem::addr::Addr;
 
+
 pub struct Fault {
     _type: FaultType,
 }
 
 pub enum FaultType {
-    BufferOverflow(BufferError)
+    BufferOverflow(Addr),
+    NullPointerDeref(Addr),
+    
     // ...
-}
-
-pub struct BufferError {
-    at_addr: Addr,
 }

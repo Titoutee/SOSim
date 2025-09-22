@@ -1,3 +1,5 @@
+use crate::paging::AddrInfo;
+
 use super::{BitMode, MemContext};
 use std::ops::Add;
 
@@ -9,10 +11,16 @@ pub struct Addr {
     pub inner: AddrInner, // (!)
 }
 
+impl Addr {
+    pub fn addr_info<'a>(&self) -> AddrInfo<'a> {
+        todo!()
+    }
+}
+
 impl Add for Addr {
     type Output = AddrInner;
     fn add(self, rhs: Self) -> Self::Output {
-        self.inner + rhs.inner // "+" yields a raw u64 address, without the thin wrapper
+        self.inner + rhs.inner
     }
 }
 
@@ -28,6 +36,18 @@ impl Into<u64> for Addr {
     }
 }
 
+impl From<usize> for Addr {
+    fn from(value: usize) -> Self {
+        Self { inner: value as u64 }
+    }
+}
+
+impl Into<usize> for Addr {
+    fn into(self) -> usize {
+        self.inner as usize
+    }
+}
+
 impl Addr {
     pub fn new(raw: u64) -> Self {
         Addr { inner: raw }
@@ -39,12 +59,12 @@ pub fn _mask(mut raw: u64, ctxt: &MemContext, idx: u8) -> u64 {
     assert!(idx < ctxt.pt_levels);
 
     let lmask = ctxt.lvl_mask;
-    let omask = ctxt.off_mask;
+    let off_mask = ctxt.off_mask;
     let off_bit_len = ctxt.v_addr_off_len;
     let lvl_bit_len = ctxt.v_addr_lvl_len;
 
     match idx {
-        0 => raw & omask,
+        0 => raw & off_mask,
         _ => {
             raw = raw >> off_bit_len;
             for _ in 1..ctxt.pt_levels {
@@ -112,22 +132,6 @@ impl VirtualAddress {
             //
         }
     }
-
-    // pub fn lvl1(&self) -> Option<u16> {
-    //     self.lvl1
-    // }
-    //
-    // pub fn lvl2(&self) -> Option<u16> {
-    //     self.lvl2
-    // }
-    //
-    // pub fn lvl3(&self) -> Option<u16> {
-    //     self.lvl3
-    // }
-    //
-    // pub fn lvl4(&self) -> Option<u16> {
-    //     self.lvl4
-    // }
 
     pub fn to_addr(&self, memctxt: &MemContext) -> Addr {
         todo!()

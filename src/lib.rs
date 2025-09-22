@@ -9,6 +9,7 @@ use crate::mem::Ram;
 
 pub mod allocator;
 pub mod ext;
+pub mod lang;
 pub mod fault;
 pub mod mem;
 pub mod paging;

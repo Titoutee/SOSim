@@ -25,6 +25,8 @@ impl _Into<u64> for bool {
         0b0
     }
 }
+
+/// u32 <-> bool
 impl _From<u32> for bool {
     fn _from(t: u32) -> Self {
         if t == 0 { false } else { true }

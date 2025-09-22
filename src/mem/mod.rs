@@ -2,7 +2,6 @@
 
 pub mod addr;
 pub mod config;
-pub mod stack;
 
 use std::fs;
 
@@ -25,6 +24,13 @@ pub const JSON_PREFIX: &str = "8";
 // /*pub*/ use addr::{Addr, VAddr, _VAddrRawCtxt};
 // /*pub*/ use paging::{PageTable, RawPTEntry, FullPTEntry};
 
+#[derive(Debug)]
+pub enum Region {
+    Heap,
+    Stack,
+    Unalloc,
+}
+
 #[derive(Deserialize, Debug, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
 pub enum BitMode {
@@ -42,13 +48,28 @@ pub struct MemoryRegion {
     // pub is_guard: bool // guarding is located within paging mechanisms
 }
 
+/// RAM bank model, acting as a mere allocation pool without any time-sync and alignment constraint.
+/// 
+/// Internally, the bank is made of a capacity-cap-ed vector (of capacity **2^`_PHYS_BITW`**).
+/// 
+/// **WARNING**: if using a custom config, this scalar should be kept relatively low.
 #[derive(Debug)]
 pub struct Ram {
     pub memory: Vec<u8>, // Mem words are 8-bit wide
-    pub size: usize,
+    // pub stack:
 }
 
-impl Ram {}
+impl Ram {
+    pub fn new(memctxt: &MemContext) -> Self {
+        Self {
+            memory: Vec::with_capacity(memctxt.phys_bitw as usize)
+        }
+    }
+
+    pub fn read_at_addr(&self, addr: Addr) -> Option<&u8> {
+        self.memory.get::<usize>(addr.into())
+    }
+}
 
 /// Machine memory context, referencing bitmode, several paging masks and information about the paging machine
 /// preset according to the bitmode.

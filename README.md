@@ -22,7 +22,7 @@ SOSim is intended to be implemented as a simplist virtual machine exposing mem-a
 
 **A RAM bank with an address space size ranging from 8-bit to 64-bit addressing** is simulated, to expose a versatile set of mechanisms, trying to get near real-world architectures (e.g. SOSim can emulate a _64-bit v-address space_ and _4-level page tables_ as in _x86\_64_).
 
-Paging is implemented at hand in a very simplistic way, in the most naive way possible, given the fact that mem-virtualization is not at the core of the presentation (albeit being breifly described for a thorough understanding
+Paging is implemented at hand in the most naive way possible, given the fact that mem-virtualization is not at the core of the presentation (albeit being breifly described for a thorough understanding
 of the main concept).
 
 For now, any form of DRAM access optimization and protection pattern (TLBs, swapping mechanisms, ...) and other subtilities (time-sync, delaying, word alignment, ...) detail is put apart.
@@ -30,6 +30,8 @@ For now, any form of DRAM access optimization and protection pattern (TLBs, swap
 One example direct consequence is that memory words' length is statically defined as `8-bit` wide, no matter the surrounding memory configuration.
 
 [More about paging and related mechanisms](https://pages.cs.wisc.edu/~remzi/OSTEP/#book-chapters)
+
+SOSim also implements a minimalist virtual machine for the emulation of a small allocation language to play around with allocations. It simply permits the user to
 
 **/!\\**
 _**The simulator does not include CPU emulation; it only serves as a memory simulator.**_
@@ -65,7 +67,7 @@ v-address formatting across these different contexts:
 
 Here are referenced the different paging contexts for each bitmode (_64-bit_ sticks to the _x86\_64_ standard)
 
-|   | PT entries | Page size | PT levels | V-addr index length | V-addr offset length |
+|   | PT entries | Page size | PT levels | VPN length | V-addr offset length |
 |:-:|:----------:|:---------:|:---------:|:-------------------:|:--------------------:|
 | **8-bit**      |-|-|-|-|-|
 | **16-bit**     |-|-|-|-|-|
