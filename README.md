@@ -1,14 +1,12 @@
 # SOSim (StackOverflow Sim)
 
-### SOS, I needed simulated paging-based allocation machinery for playing with different buffer-overflow attack patterns in my "TIPE"'s context!
+## SOS, I needed simulated paging-based allocation machinery for playing with different buffer-overflow attack patterns in my "TIPE"'s context!
 
-This repo is officially supposed to be extracted from the paging-based mem-alloc mechanisms taken out of my recent operating system project [BurritOS](https://github.com/Titoutee/BurritOS), which was entirely designed following [Oppermann's Article on Writing an OS in Rust](https://os.phil-opp.com/), unlike being implemented as a virtual machine rather than a `no_std` micro-kernel. 
+### Motivation
 
 It exists for the sake of next year's competitive oral exam, for which I chose to opt for the **presentation, demonstration and solving of buffer-overflow related issues**. Thus, beyond its name, **it will indeed not focus strictly on s-o attacks, but on more general-class b-o exploits**.
 
 *I follow here the premature, and maybe erroneous hypothesis that jury members will accept Rustlang as the basis stone of my demonstration.*
-
-### Motivation
 
 The whole point of my simulator is however to keep things simple: I just need a support for demonstrating the witty and egregious impacts of buffer-overflow attacks in a user-friendly way. Given that the jury will strictly see code snippets, **the focus is neither on time and memory efficiency, nor on writing beauty.**
 
@@ -54,6 +52,11 @@ Launching a custom instance:
 cargo run /*TODO*/
 ```
 
+#### Minilang
+*Minilang*, the minilanguage parser integrated within the simulator, permits the user to play with (de-)allocations with ease, in the most simplistic way possible, thus limited to a very restricted instruction set, which is described in Appendix.
+
+I use a proprietary text file extension: `.sos` for the sake of formality.
+
 _Implementation details will be further documented_
 
 ### Architectures
@@ -74,7 +77,9 @@ Here are referenced the different paging contexts for each bitmode (_64-bit_ sti
 | **32-bit**     |-|-|-|-|-|
 | **64-bit**   |512|4KB|4|9b|12b|
 
-### Address format specification (virtual)
+### Appendix
+
+#### Address format specification (virtual)
 
 *Each generated address is 64-bit sign-extended, and the sign extension is adjusted according to the bitmode*
 
@@ -84,3 +89,9 @@ Here are referenced the different paging contexts for each bitmode (_64-bit_ sti
 | **1**   | Write | Write operations are permitted to this page |
 | **2**   | Read | Read operations are permitted to this page |
 | **3-63** | Address | The address payload, containing extension bits depending on the bitmode |
+
+#### Minilang specification
+
+Minilang exposes the following instruction set:
+- *alloc **byte** **addr**;*  :  allocates a single specified `byte` at address `addr`
+- *struct **byte1 byte2 ... byten**, **addr**;*  :  allocates a bunch of bytes starting at address `addr`, in a way equivalent to C-lang *packed* structs.

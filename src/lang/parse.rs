@@ -1,3 +1,6 @@
+// The minilang parsing behaviour of SOSim.
+// Please read the README for more thorough info about how that miniature virtual machine language works.
+
 use peg;
 
 use crate::mem::addr::Addr;
@@ -5,7 +8,24 @@ use crate::mem::addr::Addr;
 pub type Identifier = String;
 pub type Byte = i8;
 pub type Aggr = Vec<Byte>;
+pub type AddrToParse = u64;
 
+trait _Aggr {
+    fn from_byte(byte: Byte) -> Self;
+    fn from_bytes(bytes: Vec<Byte>) -> Self;
+}
+
+impl _Aggr for Aggr {
+    fn from_byte(byte: Byte) -> Self {
+        vec![byte]
+    }
+
+    fn from_bytes(bytes: Vec<Byte>) -> Self {
+        bytes
+    }
+}
+
+#[derive(Debug)]
 pub struct _AllocReq {
     aggr: Aggr,
     // size: usize // in words -> Aggr.len()
@@ -13,20 +33,29 @@ pub struct _AllocReq {
     label: Option<String>,
 }
 
+#[derive(Debug)]
+pub struct _DeallocReq {
+    at: Addr,
+}
+
 /// Write one word at a time
+#[derive(Debug)]
 pub struct _WriteReq {
     at: Addr,
     byte: i8, // Byte replacing at `at`
 }
 
+#[derive(Debug)]
 pub struct _ReadReq {
     at: Addr,
 }
 
+#[derive(Debug)]
 pub enum Command {
     Alloc(_AllocReq),
     Write(_WriteReq),
-    Read(_ReadReq)
+    Read(_ReadReq),
+    Dealloc(_DeallocReq)
 }
 
 // Mini-lang parsing
@@ -48,10 +77,21 @@ peg::parser! {
                 let inner = {n.parse::<Byte>().or(Err("expected Byte: i8\n"))?};
                 Ok(inner)
             }
+        
+        rule addr() -> AddrToParse
+            = n:$(['0'..='9']+ ("." ['0'..='9']*)?) {?
+                let inner = {n.parse::<AddrToParse>().or(Err("expected _Addr: i64\n"))?};
+                Ok(inner)
+            }
 
-        pub (crate) rule alloc_cmd_singular_byte() -> ()
-            = "alloc" _ i:identifier() _ b:byte() _ ";" {}
+        // Allocations have no label for now
+        // There is no permission of phantom allocs btw, so that allocations must be at least 1 byte
+        pub (crate) rule alloc_byte() -> Command
+            = "alloc" _ b:byte() _ a:addr() {Command::Alloc(_AllocReq { aggr: Aggr::from_byte(b), at: Some(a.into()), label: None })}
 
+        pub (crate) rule alloc_aggr() -> Command // Aggr with > 1 bytes
+            = "struct" _ s:byte()+ _ "," a:addr() {Command::Alloc(_AllocReq { aggr: s, at: Some(a.into()), label: None })} 
+        
         // Core
         pub (crate) rule expression() -> Byte
                 = precedence! {
@@ -63,11 +103,15 @@ peg::parser! {
                 --
                 "-" _ y:@ {-y}
                 --
-                "(" _ e:expression() _ ")" { e } // This even goes slightly out of scope for our minimalist virtual machine :(
+                "(" _ e:expression() _ ")" { e } // This goes slightly out of scope for our minimalist virtual machine akshually :(
                 l:byte() { l }
             }
-
+        pub (super) rule cmd() -> Command
+            = i:alloc_byte() ";" {i}
+            /i:alloc_aggr() ";" {i}
         
+        pub (crate) rule parse() -> Vec<Command>
+            = _ cmds:cmd()** _ {cmds}
     }
 }
 

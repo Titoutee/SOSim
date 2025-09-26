@@ -1,0 +1,3 @@
+16
+align of S: 8
+[Alloc(_AllocReq { aggr: [34], at: Some(Addr { inner: 23 }), label: None })]

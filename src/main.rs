@@ -3,8 +3,9 @@ use sosim::{
     allocator, fault,
     mem::addr::Addr,
     paging::{PTEntry, PageTable},
+    lang::parse_src
 };
-use std::{fs, mem::size_of};
+use std::{fs::{self, read_to_string}, io::stdout, mem::size_of};
 
 #[cfg(any(
     all(feature = "bit16", feature = "bit32"),
@@ -24,4 +25,7 @@ compile_error!("Only one of bit8, bit16, bit32, or bit64 features can be enabled
 fn main() {
     println!("{}", size_of::<PTEntry>());
     println!("align of S: {}", std::mem::align_of::<PTEntry>());
+    let contents = read_to_string("lang_test/first.sos").expect("File reading error...");
+    // let stdout = stdout();
+    println!("{:?}", parse_src(contents).unwrap());
 }
