@@ -55,7 +55,7 @@ cargo run /*TODO*/
 #### Minilang
 *Minilang*, the minilanguage parser integrated within the simulator, permits the user to play with (de-)allocations with ease, in the most simplistic way possible, thus limited to a very restricted instruction set, which is described in Appendix.
 
-I use a proprietary text file extension: `.sos` for the sake of formality.
+The simulator uses a proprietary text file extension: `.sos` for the sake of formality only.
 
 _Implementation details will be further documented_
 

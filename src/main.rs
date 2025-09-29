@@ -1,11 +1,10 @@
-use serde::Deserialize;
 use sosim::{
-    allocator, fault,
-    mem::addr::Addr,
-    paging::{PTEntry, PageTable},
-    lang::parse_src
+    // allocator, fault,
+    // mem::addr::Addr,
+    paging::{PTEntry},
+    lang::script::parse_src
 };
-use std::{fs::{self, read_to_string}, io::stdout, mem::size_of};
+use std::{fs::{read_to_string}, mem::size_of};
 
 #[cfg(any(
     all(feature = "bit16", feature = "bit32"),

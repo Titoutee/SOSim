@@ -3,9 +3,9 @@
 // Alternatively, it can pinpoint unecessary implemenatation bits or method/function/procedure calls (mostly cloning, ...).
 
 use mem::MemContext;
-use proc::Process;
+use process::Process;
 
-use crate::mem::Ram;
+use crate::mem::MMU;
 
 pub mod allocator;
 pub mod ext;
@@ -13,12 +13,11 @@ pub mod lang;
 pub mod fault;
 pub mod mem;
 pub mod paging;
-pub mod proc;
+pub mod process;
 
 #[allow(unused)]
-pub struct Machine {
+pub struct Machine<'a> {
     ctxt: MemContext,
-    ram: Ram,
-    proc: Vec<Process>,
-    //
+    ram: MMU<'a>,
+    processes: Vec<Process>,
 }

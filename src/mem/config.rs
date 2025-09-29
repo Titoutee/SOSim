@@ -2,7 +2,6 @@ use crate::mem::BitMode;
 
 /////////// main ///////////
 pub const _PTE_LEN: u8 = 64;
-// pub const UNARY_MASK: u8 = 0b1;
 
 // Most parts of the PTE are ignored in this project
 // The unary mask will be used for `present` & `writable` at most.
@@ -24,12 +23,15 @@ pub mod bitmode {
     pub const _OFF_MASK: u64 = 0b111111111111;
     pub const _PAGE_SIZE: u32 = 4 * 1024;
     pub const _PAGE_COUNT: u16 = 512;
-   // pub const _MULTI_LEVEL: bool = true;
+    // pub const _MULTI_LEVEL: bool = true;
     pub const _PT_LEVELS: u8 = 4;
     pub const _V_ADDR_LVL_LEN: u8 = 9;
     pub const _V_ADDR_OFF_LEN: u8 = 12;
-    pub const _PHYS_BITW: u8 = 128;
+    pub const _PHYS_BITW: u8 = 64;
     pub const _PTE_PHYS_ADDR_FR_MASK: u64 = 0b111111111111111111111111111111111111111111111111111; // 61b
+    pub const _MEM_SIZE: usize = 2 ^ _PHYS_BITW as usize;
+    pub type Addr = u64;
+    pub type Vaddr = u32;
 }
 
 // (!)
@@ -46,8 +48,11 @@ pub mod bitmode {
     pub const _PT_LEVELS: u8 = 4;
     pub const _V_ADDR_LVL_LEN: u8 = 9;
     pub const _V_ADDR_OFF_LEN: u8 = 12;
-    pub const _PHYS_BITW: u8 = 128;
+    pub const _PHYS_BITW: u8 = 64;
     pub const _PTE_PHYS_ADDR_FR_MASK: u64 = 0b111111111111111111111111111111111111111111111111111; // 61b 
+    pub const _MEM_SIZE: usize = 2 ^ _PHYS_BITW as usize;
+    pub type Addr = u64;
+    pub type Vaddr = u32;
 }
 
 // (!)
@@ -64,8 +69,11 @@ pub mod bitmode {
     pub const _PT_LEVELS: u8 = 4;
     pub const _V_ADDR_LVL_LEN: u8 = 9;
     pub const _V_ADDR_OFF_LEN: u8 = 12;
-    pub const _PHYS_BITW: u8 = 128;
+    pub const _PHYS_BITW: u8 = 64;
     pub const _PTE_PHYS_ADDR_FR_MASK: u64 = 0b111111111111111111111111111111111111111111111111111; // 61b 
+    pub const _MEM_SIZE: usize = 2 ^ _PHYS_BITW as usize;
+    pub type Addr = u64;
+    pub type Vaddr = u32;
 }
 
 // 64-bit
@@ -77,18 +85,22 @@ pub mod bitmode {
     pub const _OFF_MASK: u64 = 0b111111111111; // 12b
     pub const _PAGE_SIZE: u32 = 4 * 1024; // 4KiB
     pub const _PAGE_COUNT: u16 = 512;
-    // pub const _MULTI_LEVEL: bool = true; 
+    // pub const _MULTI_LEVEL: bool = true;
     pub const _PT_LEVELS: u8 = 4;
     pub const _V_ADDR_LVL_LEN: u8 = 9;
     pub const _V_ADDR_OFF_LEN: u8 = 12;
-    pub const _PHYS_BITW: u8 = 128;
+    pub const _PHYS_BITW: u8 = 64;
     pub const _PTE_PHYS_ADDR_FR_MASK: u64 = 0b111111111111111111111111111111111111111111111111111; // 61b 
+    pub const _MEM_SIZE: usize = 2 ^ _PHYS_BITW as usize;
+    pub type Addr = u64;
+    pub type Vaddr = u32;
 }
 
-//pub trait FromWCtxt<T> {
-//    fn from(&self, ctxt: MemContext) -> T;
-//}
-//
-//pub trait IntoWCtxt<T> {
-//    fn into(&self, ctxt: MemContext) -> T;
-//}
+#[cfg(feature = "bit64")]
+pub const JSON_PREFIX: &str = "64";
+#[cfg(feature = "bit32")]
+pub const JSON_PREFIX: &str = "32";
+#[cfg(feature = "bit16")]
+pub const JSON_PREFIX: &str = "16";
+#[cfg(feature = "bit8")]
+pub const JSON_PREFIX: &str = "8";

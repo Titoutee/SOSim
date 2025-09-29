@@ -3,32 +3,25 @@
 pub mod addr;
 pub mod config;
 
-use std::fs;
-
-use addr::{Addr, VirtualAddress};
-use config::bitmode;
+use crate::{fault::{Fault, FaultType}};
+use std::{collections::HashMap, fs};
+use config::{bitmode::{Addr}};
 use serde::Deserialize;
 use serde_json;
-
-#[cfg(feature = "bit64")]
-pub const JSON_PREFIX: &str = "64";
-#[cfg(feature = "bit32")]
-pub const JSON_PREFIX: &str = "32";
-#[cfg(feature = "bit16")]
-pub const JSON_PREFIX: &str = "16";
-#[cfg(feature = "bit8")]
-pub const JSON_PREFIX: &str = "8";
-
-// type ParseResult = Result<(), String>;
-
-// /*pub*/ use addr::{Addr, VAddr, _VAddrRawCtxt};
-// /*pub*/ use paging::{PageTable, RawPTEntry, FullPTEntry};
+pub type Byte = u8;
 
 #[derive(Debug)]
-pub enum Region {
+pub enum RegionType {
     Heap,
     Stack,
-    Unalloc,
+    Neutral,
+}
+
+#[derive(Debug)]
+pub struct MemRegion { // Which can apply to both address spaces (virtual) and physical mem
+    start: Addr,
+    size: usize,
+    typ: RegionType,
 }
 
 #[derive(Deserialize, Debug, PartialEq, Eq)]
@@ -41,33 +34,69 @@ pub enum BitMode {
 }
 
 #[derive(Debug)]
-pub struct MemoryRegion {
-    pub start: Addr,
-    pub size: usize,
-    pub name: String,
-    // pub is_guard: bool // guarding is located within paging mechanisms
-}
+pub struct MemBlob(usize, RegionType);
+type EmptyO = Option<()>;
+type EmptyR = Result<(), ()>;
+type RamResult<T> = Result<T, Fault>;
 
-/// RAM bank model, acting as a mere allocation pool without any time-sync and alignment constraint.
+/// MMU made of a RAM bank model, acting as a mere allocation pool without any time-sync and alignment constraint.
+/// 
+/// *(The MMU naming can lead to confusion here, as it also includes the usable memory itself, but we consider it's just accessible
+/// remotely from the MMU from a hardware perspective)*
 /// 
 /// Internally, the bank is made of a capacity-cap-ed vector (of capacity **2^`_PHYS_BITW`**).
 /// 
 /// **WARNING**: if using a custom config, this scalar should be kept relatively low.
 #[derive(Debug)]
-pub struct Ram {
+pub struct MMU<'a> {
+    pub context: &'a MemContext,
     pub memory: Vec<u8>, // Mem words are 8-bit wide
-    // pub stack:
+    pub allocations: HashMap<Addr, MemBlob>, // Keep track of allocated memory blobs (with size)
 }
 
-impl Ram {
-    pub fn new(memctxt: &MemContext) -> Self {
+impl<'a> MMU<'a> {
+    pub fn new(memctxt: &'a MemContext) -> Self {
         Self {
-            memory: Vec::with_capacity(memctxt.phys_bitw as usize)
+            context: memctxt,
+            memory: Vec::with_capacity(memctxt.mem_size),
+            allocations: HashMap::new(),
         }
     }
+    // All these access operations are physical-level. //
 
-    pub fn read_at_addr(&self, addr: Addr) -> Option<&u8> {
-        self.memory.get::<usize>(addr.into())
+    fn _at(&self, addr: Addr) -> RamResult<&Byte> {
+        self.memory.get(addr as usize).ok_or(Fault::from(FaultType::AddrOutOfRange(addr)))
+    }
+
+    fn _at_mut(&mut self, addr: Addr) -> RamResult<&mut Byte> {
+        self.memory.get_mut(addr as usize).ok_or(Fault::from(FaultType::AddrOutOfRange(addr)))
+    }   
+    /// Reads word at `addr`
+    pub fn read_at_addr(&self, addr: Addr) -> RamResult<&Byte> {
+        self._at(addr)
+    }
+
+    // Reads word at `addr`, checking if this word is allocated yet.
+    pub fn read_at_addr_checked(&self, addr: Addr) -> Option<RamResult<&u8>> {
+        self.allocations.get(&addr)?;
+        Some(self.read_at_addr(addr))
+    }
+
+    // Writes a singular byte at `addr`.
+    pub fn write_at_addr(&mut self, addr: Addr, byte: Byte) -> EmptyO { // e.g.: Write no-alloc
+        let a = self._at_mut(addr).ok()?;
+        *a = byte;
+        Some(())
+    }
+    
+    pub fn write_at_addr_checked(&mut self, addr: Addr, byte: Byte) -> EmptyO {
+        self.allocations.get(&addr).is_none().then(||())?;
+        self.write_at_addr(addr, byte);
+        Some(())
+    }
+
+    pub fn dealloc(&mut self, addr: Addr) -> EmptyO {
+        self.allocations.remove(&addr).map(|_| ())
     }
 }
 
@@ -85,6 +114,7 @@ pub struct MemContext {
     v_addr_lvl_len: u8,
     v_addr_off_len: u8,
     phys_bitw: u8,
+    mem_size: usize,
 }
 
 impl MemContext {
@@ -112,6 +142,7 @@ impl MemContext {
             v_addr_lvl_len,
             v_addr_off_len,
             phys_bitw,
+            mem_size: 2 ^ phys_bitw as usize,
         }
     }
 
@@ -132,7 +163,7 @@ impl MemContext {
     ///
     /// Relevant magic values can be found at `./config.rs`.
     pub const fn _from_bit_mode_compiled() -> Self {
-        use bitmode::*;
+        use config::bitmode::*;
 
         Self {
             bitmode: _BIT_MODE,
@@ -145,6 +176,7 @@ impl MemContext {
             v_addr_lvl_len: _V_ADDR_LVL_LEN,
             v_addr_off_len: _V_ADDR_OFF_LEN,
             phys_bitw: _PHYS_BITW,
+            mem_size: _MEM_SIZE,
         }
     }
 }
@@ -152,12 +184,10 @@ impl MemContext {
 #[cfg(test)]
 mod tests {
     use super::MemContext;
-
+    use super::config::JSON_PREFIX;
     #[test]
     #[cfg(feature = "bit64")]
     fn from_js_64b() {
-        use super::JSON_PREFIX;
-
         let memctxt = MemContext::new(); // Set for 64b
         let path = format!("bitmodes/{}b.json", JSON_PREFIX);
         // println!("{}", path);

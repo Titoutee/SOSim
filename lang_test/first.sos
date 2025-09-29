@@ -1,1 +1,2 @@
 alloc 34 23;
+dealloc 34;

@@ -1,58 +1,6 @@
-use crate::paging::AddrInfo;
+use super::{MemContext};
 
-use super::{BitMode, MemContext};
-use std::ops::Add;
-
-type AddrInner = u64;
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-// General purpose address thin-wrapper
-pub struct Addr {
-    pub inner: AddrInner, // (!)
-}
-
-impl Addr {
-    pub fn addr_info<'a>(&self) -> AddrInfo<'a> {
-        todo!()
-    }
-}
-
-impl Add for Addr {
-    type Output = AddrInner;
-    fn add(self, rhs: Self) -> Self::Output {
-        self.inner + rhs.inner
-    }
-}
-
-impl From<u64> for Addr {
-    fn from(value: u64) -> Self {
-        Self { inner: value }
-    }
-}
-
-impl Into<u64> for Addr {
-    fn into(self) -> u64 {
-        self.inner
-    }
-}
-
-impl From<usize> for Addr {
-    fn from(value: usize) -> Self {
-        Self { inner: value as u64 }
-    }
-}
-
-impl Into<usize> for Addr {
-    fn into(self) -> usize {
-        self.inner as usize
-    }
-}
-
-impl Addr {
-    pub fn new(raw: u64) -> Self {
-        Addr { inner: raw }
-    }
-}
+pub type Addr = u64;
 
 // mere testing
 pub fn _mask(mut raw: u64, ctxt: &MemContext, idx: u8) -> u64 {
@@ -148,7 +96,7 @@ mod tests {
     #[cfg(feature = "bit64")]
     #[test]
     fn vaddr_from_raw_addr_64b() {
-        use crate::mem::addr::_mask;
+        // use crate::mem::addr::_mask;
 
         use super::VirtualAddress;
 

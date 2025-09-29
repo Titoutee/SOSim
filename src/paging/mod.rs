@@ -1,10 +1,8 @@
-use std::ops::Add;
-
 // PTE format does not exactly match the x86_64 standard, as only present, write, read bits and the address payload is are serialized
 // into the 64b bitset.
 use super::mem::addr::{Addr, VirtualAddress};
 pub use crate::ext::{_From, _Into};
-use crate::mem::{addr, config::bitmode::{_PAGE_COUNT, _PTE_PHYS_ADDR_FR_MASK}, Region};
+use crate::mem::{config::bitmode::{_PAGE_COUNT, _PTE_PHYS_ADDR_FR_MASK}, RegionType};
 
 /// A pagetable consisting of a capacity-cap-ed collection of pagetable entries (see `PTEntry`).
 /// 
@@ -58,7 +56,7 @@ impl PageTable {
 pub struct AddrInfo<'a> {
     at_vpage: &'a Page,
     // at_pframe: &'a Page, // pframe is calculated with translation, rather than stored
-    region: Region,
+    region: RegionType,
 }
 
 /// Multilevel page table, used by default by `64b` config.
