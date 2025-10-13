@@ -56,9 +56,10 @@ pub struct MMU<'a> {
 
 impl<'a> MMU<'a> {
     pub fn new(memctxt: &'a MemContext) -> Self {
+        let b : u8 = 2;
         Self {
             context: memctxt,
-            memory: Vec::with_capacity(memctxt.mem_size),
+            memory: Vec::with_capacity(b.pow(memctxt.phys_bitw as u32) as usize),
             allocations: HashMap::new(),
         }
     }
@@ -114,7 +115,6 @@ pub struct MemContext {
     v_addr_lvl_len: u8,
     v_addr_off_len: u8,
     phys_bitw: u8,
-    mem_size: usize,
 }
 
 impl MemContext {
@@ -142,7 +142,6 @@ impl MemContext {
             v_addr_lvl_len,
             v_addr_off_len,
             phys_bitw,
-            mem_size: 2 ^ phys_bitw as usize,
         }
     }
 
@@ -176,7 +175,6 @@ impl MemContext {
             v_addr_lvl_len: _V_ADDR_LVL_LEN,
             v_addr_off_len: _V_ADDR_OFF_LEN,
             phys_bitw: _PHYS_BITW,
-            mem_size: _MEM_SIZE,
         }
     }
 }

@@ -1,4 +1,4 @@
-use super::{MemContext};
+use super::MemContext;
 
 pub type Addr = u64;
 
@@ -96,8 +96,6 @@ mod tests {
     #[cfg(feature = "bit64")]
     #[test]
     fn vaddr_from_raw_addr_64b() {
-        // use crate::mem::addr::_mask;
-
         use super::VirtualAddress;
 
         let ctxt = MemContext::new();

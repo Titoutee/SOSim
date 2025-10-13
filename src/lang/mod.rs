@@ -1,5 +1,10 @@
 mod parse;
-use parse::Command;
 use parse::parser;
-pub mod toplevel;
+use parse::Command;
+pub mod event;
 pub mod script;
+pub mod toplevel;
+
+
+pub use script::parse_src;
+pub use toplevel::TopLevel;

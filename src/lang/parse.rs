@@ -1,8 +1,8 @@
-// The minilang parsing behaviour of SOSim.
+// The minilang parser of SOSim.
 // Please read the README for more info about how that miniature language works.
 
-use peg;
 use crate::mem::addr::Addr;
+use peg;
 
 pub type Identifier = String;
 pub type Scalar = i8;
@@ -26,40 +26,42 @@ impl _Aggr for Aggr {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct _AllocReq {
-    aggr: Aggr,
+    pub aggr: Aggr,
     // size: usize // in words -> Aggr.len()
-    at: Option<Addr>,
-    label: Option<String>,
+    pub at: Option<Addr>,
+    pub label: Option<String>,
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct _DeallocReq {
-    at: Addr,
+    pub at: Addr,
 }
 
 /// Write one word at a time
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct _WriteReq {
-    at: Addr,
-    scalar: i8, // Scalar replacing at `at`
+    pub at: Addr,
+    pub scalar: i8, // Scalar replacing at `at`
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct _ReadReq {
-    at: Addr,
+    pub at: Addr,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Command {
     Alloc(_AllocReq),
     Write(_WriteReq),
     Read(_ReadReq),
-    Dealloc(_DeallocReq)
+    Dealloc(_DeallocReq),
+    Exit,
+    Debug,
 }
 
 // Mini-lang parsing
@@ -77,13 +79,13 @@ peg::parser! {
             = d:var_declare() _ "=" _ e:expression() _ {(d, vec![e])}
 
         rule scalar() -> Scalar
-            = n:$(['0'..='9']+ ("." ['0'..='9']*)?) {?
+            = _ n:$(['0'..='9']+) _ {?
                 let inner = {n.parse::<Scalar>().or(Err("expected Scalar: i8\n"))?};
                 Ok(inner)
             }
-        
+
         rule addr() -> AddrToParse
-            = n:$(['0'..='9']+ ("." ['0'..='9']*)?) {?
+            = _ n:$(['0'..='9']+) _ {?
                 let inner = {n.parse::<AddrToParse>().or(Err("expected _Addr: i64\n"))?};
                 Ok(inner)
             }
@@ -91,13 +93,21 @@ peg::parser! {
         // Allocations have no label for now
         // There is no permission of phantom allocs btw, so that allocations must be at least 1 scalar
         pub (crate) rule alloc_scalar() -> Command
-            = "alloc" _ b:scalar() _ a:addr() {Command::Alloc(_AllocReq { aggr: Aggr::from_scalar(b), at: Some(a.into()), label: None })}
+            = _ "alloc" _ b:scalar() _ a:addr() {Command::Alloc(_AllocReq { aggr: Aggr::from_scalar(b), at: Some(a.into()), label: None })}
 
         pub (crate) rule alloc_aggr() -> Command // Aggr with > 1 scalars
-            = "struct" _ s:scalar()+ _ "," a:addr() {Command::Alloc(_AllocReq { aggr: s, at: Some(a.into()), label: None })} 
-        
+            = _ "struct" _ s:scalar()* _ "," _ a:addr() {Command::Alloc(_AllocReq { aggr: s, at: Some(a.into()), label: None })}
+
         pub (crate) rule dealloc() -> Command
-            = "dealloc" _ a:addr() _ {Command::Dealloc(_DeallocReq {at: a})}
+            = _ "dealloc" _ a:addr() _ {Command::Dealloc(_DeallocReq {at: a})}
+
+        // Only for interpreted context
+        pub (crate) rule exit() -> Command
+            = _ "exit" _ {Command::Exit}
+
+        pub (crate) rule dbg() -> Command
+            = _ "dbg" {Command::Debug}
+
         // Core
         pub (crate) rule expression() -> Scalar
                 = precedence! {
@@ -116,7 +126,9 @@ peg::parser! {
             = i:alloc_scalar() ";" {i}
             /i:alloc_aggr() ";" {i}
             /i:dealloc() ";" {i}
-        
+            /i:dbg() ";" {i}
+            /i:exit() ";" {i}
+
         pub (crate) rule parse() -> Vec<Command>
             = _ cmds:cmd()** _ {cmds}
     }
@@ -124,10 +136,13 @@ peg::parser! {
 
 #[cfg(test)]
 mod test {
-    use crate::lang::parser;
+    use crate::lang::{
+        parse::{Command, _AllocReq, _DeallocReq},
+        parser,
+    };
 
     ////////////// Expression //////////////
-    
+
     #[test]
     fn expression_add_par() {
         assert_eq!(parser::expression("(54+2)").unwrap(), 56);
@@ -153,7 +168,48 @@ mod test {
         assert_eq!(parser::expression("54/2").unwrap(), 0);
     }
 
-    ////////////// Other //////////////
-    
+    ////////////// Commands //////////////
 
+    #[test]
+    #[should_panic]
+    fn ill_command_sc() {
+        // We use alloc here but any command missing a semicolon is ill_formed really
+        let cmd = "alloc 24 0";
+        parser::cmd(cmd).unwrap();
+    }
+
+    #[test]
+    fn _alloc_scalar() {
+        let cmd = "alloc 24 0;";
+        assert_eq!(
+            parser::cmd(cmd).unwrap(),
+            Command::Alloc(_AllocReq {
+                aggr: vec![24],
+                at: Some(0),
+                label: None
+            })
+        );
+    }
+
+    #[test]
+    fn _alloc_aggr() {
+        let cmd = "struct 24 35 64,0;";
+        assert_eq!(
+            parser::cmd(cmd).unwrap(),
+            Command::Alloc(_AllocReq {
+                aggr: vec![24, 35, 64],
+                at: Some(0),
+                label: None
+            })
+        );
+    }
+
+    #[test]
+    fn _dealloc() {
+        let cmd = "dealloc 0;";
+        assert_eq!(
+            parser::cmd(cmd).unwrap(),
+            Command::Dealloc(_DeallocReq { at: 0 })
+        );
+    }
 }
