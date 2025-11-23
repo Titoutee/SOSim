@@ -1,6 +1,6 @@
 # SOSim (StackOverflow Sim)
 
-## SOS, I needed simulated paging-based allocation machinery for playing with different buffer-overflow attack patterns in my "TIPE"'s context!
+## SOS, I needed simulated paging-based allocation machinery for playing with different buffer-overflow attack patterns in a "TIPE"'s context!
 
 ### Motivation
 
@@ -12,7 +12,7 @@ The whole point of my simulator is however to keep things simple: I just need a 
 
 ### The Simulator
 
-The main goal of the virtual machine is to **emulate hardware translation mechanisms between address spaces in a paging environment** to give support for the demonstration of buffer overflows, in parallel to giving a bit of context about mem virtualization.
+The main goal of the virtual machine is to **emulate hardware translation mechanisms** between **address spaces** in a **page-d environment** to give support for the demonstration of *buffer overflows*, in parallel to giving a bit of necessary knowledge about *memory virtualization* modern strategies.
 
 SOSim is intended to be implemented as a simplist virtual machine exposing mem-alloc mechanisms, rather than a micro-kernel, which would add unnecessary performance and implementation overhead.
 
@@ -20,19 +20,24 @@ SOSim is intended to be implemented as a simplist virtual machine exposing mem-a
 
 **A RAM bank with an address space size ranging from 8-bit to 64-bit addressing** is simulated, to expose a versatile set of mechanisms, trying to get near real-world architectures (e.g. SOSim can emulate a _64-bit v-address space_ and _4-level page tables_ as in _x86\_64_).
 
-Paging is implemented at hand in the most naive way possible, given the fact that mem-virtualization is not at the core of the presentation (albeit being breifly described for a thorough understanding
-of the main concept).
+#### Which memory architecture?
+
+Grossly, **SOSim** uses a hybrid memory approach, mixing a page-slicing strategy both in adress space (chops called *pages*) and in physical memory (chops called *(physical) frames*), and a segmented approach (for the *stack*). The **main semantic meaning** of the **segmented part** is for including a simple-to-implement *bounded stack*.
+
+#### What is NOT SOSim?
 
 For now, any form of DRAM access optimization and protection pattern (TLBs, swapping mechanisms, ...) and other subtilities (time-sync, delaying, word alignment, ...) detail is put apart.
 
-One example direct consequence is that memory words' length is statically defined as `8-bit` wide, no matter the surrounding memory configuration.
+One example direct consequence is that memory words' length is statically **defined as `8-bit` wide**, no matter the surrounding memory configuration.
 
 [More about paging and related mechanisms](https://pages.cs.wisc.edu/~remzi/OSTEP/#book-chapters)
 
-SOSim also implements a minimalist virtual machine for the emulation of a small allocation language to play around with allocations. It simply permits the user to
-
 **/!\\**
 _**The simulator does not include CPU emulation; it only serves as a memory simulator.**_
+
+#### How far can we interact with SOSim?
+
+SOSim implements **a minimalist virtual machine** for the emulation of **a small "allocation" language** to play around with allocations, as the user would like. With this handle, one may demonstrate *unsafe practices* as well as allocating *safely*.
 
 ### Using the Simulator
 
@@ -53,9 +58,15 @@ cargo run /*TODO*/
 ```
 
 #### Minilang
-*Minilang*, the minilanguage parser integrated within the simulator, permits the user to play with (de-)allocations with ease, in the most simplistic way possible, thus limited to a very restricted instruction set, which is described in Appendix.
 
-The simulator uses a proprietary text file extension: `.sos` for the sake of formality only.
+*Minilang*, the **minilanguage parser** integrated within the simulator, permits the user to play with (de-)allocations with ease, in the most simplistic way possible, thus limited to **a small instruction set**, which is described in Appendix.
+
+The simulator uses a proprietary text file extension: `.sos` (for the sake of formality only).
+
+The simulator can be either used in ***file interpreter*** or ***toplevel*** mode.
+To use the simlator in the *file interpreter* mode, pass ***--file*** *[file]* or ***-f*** *[file]* to specify the file to parse.
+
+Details of the toplevel mode, which is more handy for playing with the simulator in a step-by-step fashion, are described in appendix.
 
 _Implementation details will be further documented_
 
@@ -95,3 +106,9 @@ Here are referenced the different paging contexts for each bitmode (_64-bit_ sti
 Minilang exposes the following instruction set:
 - *alloc **byte** **addr**;*  :  allocates a single specified `byte` at address `addr`
 - *struct **byte1 byte2 ... byten**, **addr**;*  :  allocates a bunch of bytes starting at address `addr`, in a way equivalent to C-lang *packed* structs.
+
+#### Minilang toplevel
+
+The toplevel is furnished with the package as *a separate client* (Python 3.x) which permits the **input of MiniLang commands in series**.
+
+_Details will be further documented_

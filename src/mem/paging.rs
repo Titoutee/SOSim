@@ -1,12 +1,12 @@
 // PTE format does not exactly match the x86_64 standard, as only present, write, read bits and the address payload is are serialized
 // into the 64b bitset.
 
-use super::mem::addr::{Addr, VirtualAddress};
+use super::addr::{Addr, VirtualAddress};
 pub use crate::ext::{_From, _Into};
-use crate::mem::{config::bitmode::{_PAGE_COUNT, _PTE_PHYS_ADDR_FR_MASK}, RegionType};
+use crate::mem::config::bitmode::{_PAGE_COUNT, _PTE_PHYS_ADDR_FR_MASK};
 
 /// A pagetable consisting of a capacity-cap-ed collection of pagetable entries (see `PTEntry`).
-/// 
+///
 /// Off entries, for unallocated pages, are `None`, but this state is not guaranteed at the initialisation time by
 /// `new_init`, which simply returns a table with a capacity of `_PAGE_COUNT`.
 pub struct PageTable {
@@ -54,22 +54,16 @@ impl PageTable {
     pub fn translation(&self, vaddr: VirtualAddress) {}
 }
 
-pub struct AddrInfo<'a> {
-    at_vpage: &'a Page,
-    // at_pframe: &'a Page, // pframe is calculated with translation, rather than stored
-    region: RegionType,
-}
-
 /// Multilevel page table, used by default by `64b` config.
 pub struct PageDirectory {
     levels: [Option<PageTable>; 4],
 }
 
-/// Is used both as physical frames and virtual pages
+/// Both as physical frames and virtual pages.
 #[derive(Debug)]
 pub struct Page {
     bottom: Addr,
-    top: Addr, // top is exclusive 
+    top: Addr, // top is exclusive
 }
 
 // Used for pretending to be x86

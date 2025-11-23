@@ -7,14 +7,16 @@ pub struct Fault {
 }
 
 impl Fault {
-    pub fn from(typ: FaultType) -> Self {
-        Self {_type: typ}
+    pub fn _from(typ: FaultType) -> Self {
+        Self { _type: typ }
     }
 }
 
 pub enum FaultType {
     BufferOverflow(Addr),
+    StackOverflow(Addr),
     NullPointerDeref(Addr),
     AddrOutOfRange(Addr),
+    Unrecoverable,
     // ...
 }

@@ -9,19 +9,29 @@ pub type Scalar = i8;
 pub type Aggr = Vec<Scalar>;
 pub type AddrToParse = u64;
 
-trait _Aggr {
-    fn from_scalar(scalar: Scalar) -> Self;
+trait _Aggr<T> {
+    fn from_(i: T) -> Self;
     #[allow(dead_code)]
-    fn from_scalars(scalars: Vec<Scalar>) -> Self;
+    fn from_s(i: Vec<T>) -> Self;
 }
 
-impl _Aggr for Aggr {
-    fn from_scalar(scalar: Scalar) -> Self {
-        vec![scalar]
+impl<T> _Aggr<T> for Vec<T> {
+    fn from_(i: T) -> Self {
+        vec![i]
     }
 
-    fn from_scalars(scalars: Vec<Scalar>) -> Self {
-        scalars
+    fn from_s(i: Vec<T>) -> Self {
+        i
+    }
+}
+
+pub trait Unwrap<U> {
+    fn unwrap_(&self) -> Option<&U>;
+}
+
+impl Unwrap<Command> for Vec<Command> {
+    fn unwrap_(&self) -> Option<&Command> {
+        if self.len() <= 1 { self.get(0) } else { None }
     }
 }
 
@@ -93,7 +103,7 @@ peg::parser! {
         // Allocations have no label for now
         // There is no permission of phantom allocs btw, so that allocations must be at least 1 scalar
         pub (crate) rule alloc_scalar() -> Command
-            = _ "alloc" _ b:scalar() _ a:addr() {Command::Alloc(_AllocReq { aggr: Aggr::from_scalar(b), at: Some(a.into()), label: None })}
+            = _ "alloc" _ b:scalar() _ a:addr() {Command::Alloc(_AllocReq { aggr: Aggr::from_(b), at: Some(a.into()), label: None })}
 
         pub (crate) rule alloc_aggr() -> Command // Aggr with > 1 scalars
             = _ "struct" _ s:scalar()* _ "," _ a:addr() {Command::Alloc(_AllocReq { aggr: s, at: Some(a.into()), label: None })}
@@ -137,7 +147,7 @@ peg::parser! {
 #[cfg(test)]
 mod test {
     use crate::lang::{
-        parse::{Command, _AllocReq, _DeallocReq},
+        parse::{_AllocReq, _DeallocReq, Command},
         parser,
     };
 

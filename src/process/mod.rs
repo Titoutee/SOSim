@@ -1,12 +1,10 @@
 //! Processes
 
-use super::{paging::PageTable};
+use crate::mem::paging::PageTable;
 
-pub struct ProcContext {
-    
-}
+pub struct ProcContext {}
 
 pub struct Process {
     ctxt: ProcContext,
-    pt: Box<PageTable>,
+    pt: PageTable,
 }

@@ -5,19 +5,16 @@
 use mem::MemContext;
 use process::Process;
 
-use crate::mem::MMU;
+use crate::mem::{MMU, Memory};
 
-pub mod allocator;
 pub mod ext;
-pub mod lang;
 pub mod fault;
+pub mod lang;
 pub mod mem;
-pub mod paging;
 pub mod process;
 
 #[allow(unused)]
 pub struct Machine<'a> {
-    ctxt: MemContext,
-    ram: MMU<'a>,
+    ram: Memory<'a>,
     processes: Vec<Process>,
 }

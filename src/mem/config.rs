@@ -13,6 +13,11 @@ pub const _PTE_LEN: u8 = 64;
 // pub const PTE_W_MASK: u64 = 0b1;
 // pub const PTE_R_MASK: u64 = 0b1;
 
+// No, stack is just really for stack overflow testing, let's keep it smol :D
+
+pub const STACK_BASE: usize = 0;
+pub const STACK_SZ: usize = 64;
+
 // (!)
 // 8-bit
 #[cfg(feature = "bit8")]
