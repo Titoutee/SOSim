@@ -39,9 +39,13 @@ async fn main() {
     println!("Parsing arguments [...]");
 
     if let Some(path) = cli.file {
+        println!("[File parsing mode]");
         let contents = read_to_string(path).expect("File reading error...");
         println!("{:?}", parse_src(contents).unwrap());
     } else {
-        TopLevel::_spawn(cli.socket).await;
+        println!("[Toplevel interpreting mode]");
+        println!("[Server startup]");
+
+        TopLevel::_spawn(cli.socket).await.unwrap();
     }
 }

@@ -36,7 +36,7 @@ impl Unwrap<Command> for Vec<Command> {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct _AllocReq {
     pub aggr: Aggr,
     // size: usize // in words -> Aggr.len()
@@ -45,26 +45,26 @@ pub struct _AllocReq {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct _DeallocReq {
     pub at: Addr,
 }
 
 /// Write one word at a time
 #[allow(dead_code)]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct _WriteReq {
     pub at: Addr,
     pub scalar: i8, // Scalar replacing at `at`
 }
 
 #[allow(dead_code)]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct _ReadReq {
     pub at: Addr,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Command {
     Alloc(_AllocReq),
     Write(_WriteReq),
@@ -72,6 +72,7 @@ pub enum Command {
     Dealloc(_DeallocReq),
     Exit,
     Debug,
+    Empty, // Init
 }
 
 // Mini-lang parsing
