@@ -2,6 +2,8 @@
 
 ## SOS, I needed simulated paging-based allocation machinery for playing with different buffer-overflow attack patterns in a "TIPE"'s context!
 
+---
+
 ### Motivation
 
 It exists for the sake of next year's competitive oral exam, for which I chose to opt for the **presentation, demonstration and solving of buffer-overflow related issues**. Thus, beyond its name, **it will indeed not focus strictly on s-o attacks, but on more general-class b-o exploits**.
@@ -10,11 +12,15 @@ It exists for the sake of next year's competitive oral exam, for which I chose t
 
 The whole point of my simulator is however to keep things simple: I just need a support for demonstrating the witty and egregious impacts of buffer-overflow attacks in a user-friendly way. Given that the jury will strictly see code snippets, **the focus is neither on time and memory efficiency, nor on writing beauty.**
 
+---
+
 ### The Simulator
 
 The main goal of the virtual machine is to **emulate hardware translation mechanisms** between **address spaces** in a **page-d environment** to give support for the demonstration of *buffer overflows*, in parallel to giving a bit of necessary knowledge about *memory virtualization* modern strategies.
 
 SOSim is intended to be implemented as a simplist virtual machine exposing mem-alloc mechanisms, rather than a micro-kernel, which would add unnecessary performance and implementation overhead.
+
+---
 
 ### What does SOSim simulate?
 
@@ -38,6 +44,8 @@ _**The simulator does not include CPU emulation; it only serves as a memory simu
 #### How far can we interact with SOSim?
 
 SOSim implements **a minimalist virtual machine** for the emulation of **a small "allocation" language** to play around with allocations, as the user would like. With this handle, one may demonstrate *unsafe practices* as well as allocating *safely*.
+
+---
 
 ### Using the Simulator
 
@@ -70,6 +78,8 @@ Details of the toplevel mode, which is more handy for playing with the simulator
 
 _Implementation details will be further documented_
 
+---
+
 ### Architectures
 
 SOSim permits to **emulate address spaces of different bitsizes**, in order to
@@ -88,6 +98,8 @@ Here are referenced the different paging contexts for each bitmode (_64-bit_ sti
 | **32-bit**     |-|-|-|-|-|
 | **64-bit**   |512|4KB|4|9b|12b|
 
+---
+
 ### Appendix
 
 #### Address format specification (virtual)
@@ -99,7 +111,7 @@ Here are referenced the different paging contexts for each bitmode (_64-bit_ sti
 | **0**   | Present | The page is already present and active in volatile memory |
 | **1**   | Write | Write operations are permitted to this page |
 | **2**   | Read | Read operations are permitted to this page |
-| **3-63** | Address | The address payload, containing extension bits depending on the bitmode |
+| **3-63** | Address | The address payload, containing more or less extension bits depending on the bitmode |
 
 #### Minilang specification
 
@@ -110,5 +122,21 @@ Minilang exposes the following instruction set:
 #### Minilang toplevel
 
 The toplevel is furnished with the package as *a separate client* (Python 3.x) which permits the **input of MiniLang commands in series**.
+
+#### Signalling
+
+The server uses signals to tell the client what the last received command did and some more info about how the client changed the server's internal state (maybe after an `AllocRequest`, the client could be happy to know how legal the operation was...)
+
+The strict signal specification is summed up in the following table:
+
+| Command | Signal |
+|:-:|:-:|
+| Exit | 0x0 |
+| Alloc | 0x1 |
+| Dealloc | 0x2 |
+| Write | 0x3 |
+| Read | 0x4 |
+| Debug | 0x5 |
+
 
 _Details will be further documented_

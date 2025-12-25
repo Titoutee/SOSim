@@ -27,35 +27,13 @@ pub mod bitmode {
     pub const _LVL_MASK: u64 = 0b111111111;
     pub const _OFF_MASK: u64 = 0b111111111111;
     pub const _PAGE_SIZE: u32 = 4 * 1024;
-    pub const _PAGE_COUNT: u16 = 512;
+    pub const _PAGE_COUNT: usize = 512;
     // pub const _MULTI_LEVEL: bool = true;
     pub const _PT_LEVELS: u8 = 4;
     pub const _V_ADDR_LVL_LEN: u8 = 9;
     pub const _V_ADDR_OFF_LEN: u8 = 12;
     pub const _PHYS_BITW: u8 = 64;
     pub const _PTE_PHYS_ADDR_FR_MASK: u64 = 0b111111111111111111111111111111111111111111111111111; // 61b
-    pub const _MEM_SIZE: usize = 2 ^ _PHYS_BITW as usize;
-    pub type Addr = u64;
-    pub type Vaddr = u32;
-}
-
-// (!)
-// 16-bit
-#[cfg(feature = "bit16")]
-pub mod bitmode {
-    use super::BitMode;
-    pub const _BIT_MODE: BitMode = BitMode::Bit16;
-    pub const _LVL_MASK: u64 = 0b111111111;
-    pub const _OFF_MASK: u64 = 0b111111111111;
-    pub const _PAGE_SIZE: u32 = 4 * 1024;
-    pub const _PAGE_COUNT: u16 = 512;
-    // pub const _MULTI_LEVEL: bool = true;
-    pub const _PT_LEVELS: u8 = 4;
-    pub const _V_ADDR_LVL_LEN: u8 = 9;
-    pub const _V_ADDR_OFF_LEN: u8 = 12;
-    pub const _PHYS_BITW: u8 = 64;
-    pub const _PTE_PHYS_ADDR_FR_MASK: u64 = 0b111111111111111111111111111111111111111111111111111; // 61b 
-    pub const _MEM_SIZE: usize = 2 ^ _PHYS_BITW as usize;
     pub type Addr = u64;
     pub type Vaddr = u32;
 }
@@ -69,43 +47,18 @@ pub mod bitmode {
     pub const _LVL_MASK: u64 = 0b111111111;
     pub const _OFF_MASK: u64 = 0b111111111111;
     pub const _PAGE_SIZE: u32 = 4 * 1024;
-    pub const _PAGE_COUNT: u16 = 512;
+    pub const _PAGE_COUNT: usize = 512;
     // pub const _MULTI_LEVEL: bool = true;
     pub const _PT_LEVELS: u8 = 4;
     pub const _V_ADDR_LVL_LEN: u8 = 9;
     pub const _V_ADDR_OFF_LEN: u8 = 12;
-    pub const _PHYS_BITW: u8 = 64;
+    pub const _PHYS_BITW: u8 = 32;
     pub const _PTE_PHYS_ADDR_FR_MASK: u64 = 0b111111111111111111111111111111111111111111111111111; // 61b 
-    pub const _MEM_SIZE: usize = 2 ^ _PHYS_BITW as usize;
     pub type Addr = u64;
     pub type Vaddr = u32;
 }
 
-// 64-bit
-#[cfg(feature = "bit64")]
-pub mod bitmode {
-    use super::BitMode;
-    pub const _BIT_MODE: BitMode = BitMode::Bit64;
-    pub const _LVL_MASK: u64 = 0b111111111; // 9b
-    pub const _OFF_MASK: u64 = 0b111111111111; // 12b
-    pub const _PAGE_SIZE: u32 = 4 * 1024; // 4KiB
-    pub const _PAGE_COUNT: u16 = 512;
-    // pub const _MULTI_LEVEL: bool = true;
-    pub const _PT_LEVELS: u8 = 4;
-    pub const _V_ADDR_LVL_LEN: u8 = 9;
-    pub const _V_ADDR_OFF_LEN: u8 = 12;
-    pub const _PHYS_BITW: u8 = 64;
-    pub const _PTE_PHYS_ADDR_FR_MASK: u64 = 0b111111111111111111111111111111111111111111111111111; // 61b 
-    pub const _MEM_SIZE: usize = 2 ^ _PHYS_BITW as usize;
-    pub type Addr = u64;
-    pub type Vaddr = u32;
-}
-
-#[cfg(feature = "bit64")]
-pub const JSON_PREFIX: &str = "64";
 #[cfg(feature = "bit32")]
 pub const JSON_PREFIX: &str = "32";
-#[cfg(feature = "bit16")]
-pub const JSON_PREFIX: &str = "16";
 #[cfg(feature = "bit8")]
 pub const JSON_PREFIX: &str = "8";

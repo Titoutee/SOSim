@@ -117,7 +117,7 @@ peg::parser! {
             = _ "exit" _ {Command::Exit}
 
         pub (crate) rule dbg() -> Command
-            = _ "dbg" {Command::Debug}
+            = _ "dbg" _ {Command::Debug}
 
         // Core
         pub (crate) rule expression() -> Scalar

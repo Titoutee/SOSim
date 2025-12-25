@@ -1,6 +1,5 @@
 import socket
 import input as ipt
-import cmd
 
 path = "./net_cfg"
 
@@ -15,14 +14,19 @@ socket.connect((addr, int(port)))
 while True:
     ipt.clear_stdin()
 
-    command = input("$ ").strip()  # command sent as plain text to server
-    socket.send(command.encode())
+    command = input("$ ")
+    if command == "":
+        continue
+
+    socket.send(command.encode(encoding="utf-8"))
     back = int.from_bytes(socket.recv(4096), byteorder='big')
 
-    print(back)
+    if back == 1:
+        print("Syntax error...")
+    if back == 3:
+        print("Unimplemented command...")
     if back == 4:  # EXIT signal code
         break
-    elif back == 1:
-        print("Syntax error...")
+
 
 print("[Client shutdown...]")

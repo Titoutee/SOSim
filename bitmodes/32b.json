@@ -7,5 +7,8 @@
   "pt_levels": 4,
   "v_addr_lvl_len": 9,
   "v_addr_off_len": 12,
-  "phys_bitw": 128
+  "phys_bitw": 32,
+  "stack_base": 0,
+  "stack_sz": 64,
+  "physical_mem_sz": 32
 }

@@ -1,9 +1,9 @@
 use clap::{Parser, Subcommand};
+use num_cpus::get;
 use sosim::{
+    Machine,
     lang::{script::parse_src, toplevel::TopLevel},
-    // allocator, fault,
-    // mem::addr::Addr,
-    mem::paging::PTEntry,
+    mem::{MemContext, paging::PTEntry},
 };
 use std::{
     fs::read_to_string,
@@ -34,6 +34,12 @@ struct Cli {
 async fn main() {
     // println!("{}", size_of::<PTEntry>());
     // println!("align of S: {}", std::mem::align_of::<PTEntry>());
+    let memctxt = MemContext::new();
+    let machine = Machine::new(&memctxt);
+
+    // Process adding...
+
+    println!("Max. concurrent processes number: {}", num_cpus::get());
 
     let cli = Cli::parse();
     println!("Parsing arguments [...]");

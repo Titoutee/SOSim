@@ -93,7 +93,7 @@ mod tests {
 
     const raw_addr: u64 = 0b0000000000000000111100000000001111111111000000000011111111110000;
 
-    #[cfg(feature = "bit64")]
+    #[cfg(feature = "bit32")]
     #[test]
     fn vaddr_from_raw_addr_64b() {
         use super::VirtualAddress;

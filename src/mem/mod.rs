@@ -6,7 +6,10 @@ pub mod paging;
 
 use crate::{
     fault::{Fault, FaultType},
-    mem::config::{STACK_BASE, STACK_SZ},
+    mem::{
+        config::{STACK_BASE, STACK_SZ},
+        paging::Page,
+    },
 };
 use config::bitmode::Addr;
 use num::pow::Pow;
@@ -14,6 +17,8 @@ use serde::Deserialize;
 use serde_json;
 use std::{collections::HashMap, fs, ops::Add};
 pub type Byte = u8;
+
+const BIT_BASE: u64 = 2;
 
 #[derive(Debug)]
 pub enum RegionType {
@@ -103,9 +108,9 @@ pub struct MMU {
 }
 
 impl MMU {
-    pub fn new_init(pg_n: u16) -> Self {
+    pub fn new_init(page_count: usize) -> Self {
         MMU {
-            active: vec![false; pg_n as usize],
+            active: vec![false; page_count],
             allocations: HashMap::new(),
         }
     }
@@ -118,6 +123,7 @@ pub struct Memory<'a> {
     pub mmu: MMU,
     pub context: &'a MemContext,
     pub ram: Ram, // Mem words are 8-bit wide
+    pub free_list: Vec<Page>,
 }
 
 impl<'a> Memory<'a> {
@@ -129,10 +135,12 @@ impl<'a> Memory<'a> {
             cap: memctxt.stack_sz as u64,
             sp: 0,
         };
+        let free_list = Vec::from_iter(std::iter::repeat(Page()).take(memctxt.page_count as usize));
         Self {
             mmu: MMU::new_init(memctxt.page_count),
             context: memctxt,
             ram: Ram::new(b.pow(memctxt.phys_bitw as u32) as usize, stack),
+            free_list,
         }
     }
 
@@ -203,20 +211,20 @@ impl<'a> Memory<'a> {
 /// preset according to the bitmode.
 #[derive(Deserialize, Debug, PartialEq, Eq)]
 pub struct MemContext {
-    bitmode: BitMode,
-    lvl_mask: u64,
-    off_mask: u64,
-    page_size: u32, // Page size is constant across vmem and pmem
-    page_count: u16,
+    pub bitmode: BitMode,
+    pub lvl_mask: u64,
+    pub off_mask: u64,
+    pub page_size: u32, // Page size is constant across vmem and pmem
+    pub page_count: usize,
     // multilevel: bool,
-    pt_levels: u8,
-    v_addr_lvl_len: u8,
-    v_addr_off_len: u8,
-    phys_bitw: u8,
-    stack_base: usize,
-    stack_sz: usize,
+    pub pt_levels: u8,
+    pub v_addr_lvl_len: u8,
+    pub v_addr_off_len: u8,
+    pub phys_bitw: u8,
+    pub stack_base: usize,
+    pub stack_sz: usize,
     // Not in config //
-    physical_mem_sz: usize, // In words
+    pub physical_mem_sz: u64, // In words
 }
 
 impl MemContext {
@@ -226,7 +234,7 @@ impl MemContext {
         lvl_mask: u64,
         off_mask: u64,
         page_size: u32,
-        page_count: u16,
+        page_count: usize,
         //multilevel: bool,
         pt_levels: u8,
         v_addr_lvl_len: u8,
@@ -248,7 +256,7 @@ impl MemContext {
             phys_bitw,
             stack_base,
             stack_sz,
-            physical_mem_sz: (2).pow(phys_bitw) as usize,
+            physical_mem_sz: BIT_BASE.pow(phys_bitw as u32),
         }
     }
 
@@ -261,7 +269,8 @@ impl MemContext {
     /// Substitution to `_from_bit_mode_compiled`.
     pub fn from_json(path: &str) -> Result<MemContext, serde_json::Error> {
         let json: String = fs::read_to_string(path).unwrap();
-        let ctxt: MemContext = serde_json::from_str(&json)?;
+        let mut ctxt: MemContext = serde_json::from_str(&json)?;
+        ctxt.physical_mem_sz = BIT_BASE.pow(ctxt.physical_mem_sz as u32);
         Ok(ctxt)
     }
 
@@ -283,7 +292,7 @@ impl MemContext {
             phys_bitw: _PHYS_BITW,
             stack_base: STACK_BASE,
             stack_sz: STACK_SZ,
-            physical_mem_sz: (2).pow(_PHYS_BITW) as usize,
+            physical_mem_sz: BIT_BASE.pow(_PHYS_BITW as u32),
         }
     }
 }
@@ -291,36 +300,13 @@ impl MemContext {
 #[cfg(test)]
 mod tests {
     use super::MemContext;
-    use super::config::JSON_PREFIX;
-    #[test]
-    #[cfg(feature = "bit64")]
-    fn from_js_64b() {
-        let memctxt = MemContext::new(); // Set for 64b
-        let path = format!("bitmodes/{}b.json", JSON_PREFIX);
-        // println!("{}", path);
-
-        let from_js = MemContext::from_json(&path).unwrap();
-        assert_eq!(memctxt, from_js);
-    }
+    pub use super::config::JSON_PREFIX;
 
     #[test]
     #[cfg(feature = "bit32")]
     fn from_js_32b() {
-        use super::JSON_PREFIX;
         println!("{}", JSON_PREFIX);
         let memctxt = MemContext::new(); // Set for 32b
-
-        let from_js = MemContext::from_json(&format!("bitmodes/{}b.json", JSON_PREFIX)).unwrap();
-        assert_eq!(memctxt, from_js);
-        //
-    }
-
-    #[test]
-    #[cfg(feature = "bit16")]
-    fn from_js_16b() {
-        use super::JSON_PREFIX;
-
-        let memctxt = MemContext::new(); // Set for 16b
 
         let from_js = MemContext::from_json(&format!("bitmodes/{}b.json", JSON_PREFIX)).unwrap();
         assert_eq!(memctxt, from_js);

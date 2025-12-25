@@ -1,5 +1,5 @@
 mod parse;
-use parse::Command;
+pub use parse::Command;
 use parse::parser;
 pub mod event;
 pub mod script;

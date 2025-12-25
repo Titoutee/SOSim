@@ -3,7 +3,7 @@
 
 use super::addr::{Addr, VirtualAddress};
 pub use crate::ext::{_From, _Into};
-use crate::mem::config::bitmode::{_PAGE_COUNT, _PTE_PHYS_ADDR_FR_MASK};
+use crate::mem::config::bitmode::_PTE_PHYS_ADDR_FR_MASK;
 
 /// A pagetable consisting of a capacity-cap-ed collection of pagetable entries (see `PTEntry`).
 ///
@@ -21,9 +21,9 @@ impl PageTable {
 
     /// Initialises the pagetable with an inner vector of capacity `_PAGE_COUNT`.
     /// This capacity should be kept untouched, as specified by the config's page table length.
-    pub fn new_init() -> Self {
+    pub fn new_init(page_count: usize) -> Self {
         PageTable {
-            arr: Vec::with_capacity(_PAGE_COUNT as usize),
+            arr: Vec::with_capacity(page_count),
         }
     }
 
@@ -39,9 +39,9 @@ impl PageTable {
         Some(())
     }
 
-    /// Retrieves the physical frame base address for the PTE at add `at_addr`.
+    /// Retrieves the physical frame address for the PTE at address `at_addr`.
     ///
-    /// This is the only step within the translation process which includes interaction which the pagetable.
+    /// This is the only step within the translation process which includes interaction with the page table.
     pub fn _get_frame_addr(&self, at_addr: Option<u16>) -> Option<Addr> {
         Some(
             (*self.arr.get(at_addr? as usize)?)
@@ -54,17 +54,14 @@ impl PageTable {
     pub fn translation(&self, vaddr: VirtualAddress) {}
 }
 
-/// Multilevel page table, used by default by `64b` config.
+/// Multilevel page table, used by default by `32b` config.
 pub struct PageDirectory {
-    levels: [Option<PageTable>; 4],
+    levels: [Option<PageTable>; 2],
 }
 
-/// Both as physical frames and virtual pages.
-#[derive(Debug)]
-pub struct Page {
-    bottom: Addr,
-    top: Addr, // top is exclusive
-}
+/// Both physical frames and virtual pages.
+#[derive(Debug, Clone)]
+pub struct Page();
 
 // Used for pretending to be x86
 /// A RawPTEntry is really just a bitset encoding the specified bits and payloads.
