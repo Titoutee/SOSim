@@ -7,22 +7,20 @@ pub mod paging;
 use crate::{
     fault::{Fault, FaultType},
     mem::{
-        config::{STACK_BASE, STACK_SZ},
+        config::{_STACK_BASE, _STACK_SZ, MEM_CTXT, MemContext},
         paging::Page,
     },
 };
 use config::bitmode::Addr;
-use num::pow::Pow;
+use lazy_static::lazy_static;
 use serde::Deserialize;
 use serde_json;
-use std::{collections::HashMap, fs, ops::Add};
-pub type Byte = u8;
+use std::{collections::HashMap, fs};
 
-const BIT_BASE: u64 = 2;
+use crate::lang::{Byte, Struct};
 
 #[derive(Debug)]
 pub enum RegionType {
-    Heap,
     Stack,
     Neutral,
 }
@@ -54,8 +52,8 @@ type MemResult<T> = Result<T, Fault>;
 pub struct Stack {
     base: Addr,
     sz: usize,
-    sp: u64,
-    cap: u64,
+    sp: Addr,
+    cap: Addr,
 }
 
 impl Stack {
@@ -85,10 +83,10 @@ impl Stack {
 /// *Physical memory* consisting of one singular bank of SRAM.
 ///
 /// Internally, the bank is made of a capacity-cap-ped `Vec` (of capacity **2^`_PHYS_BITW`**),
-/// initialised according to (pre-)defined memory context settings, the stack and heap positions within main memory, etc...
+/// zinitialised according to (pre-)defined memory context settings, the stack and heap positions within main memory, etc...
 #[derive(Debug)]
 pub struct Ram {
-    pub _in: Vec<u8>,
+    pub _in: Vec<Page>,
     pub stack: Stack,
 } // (Main, Stack, SP)
 
@@ -103,90 +101,106 @@ impl Ram {
 
 #[derive(Debug)]
 pub struct MMU {
-    pub active: Vec<bool>, // Track keeping of allocated/active pages in main memory: at index `i` is `true` if the `i`th page of main memory is allocated
+    pub free_list: Vec<Page>,
+    pub used_list: Vec<Page>,                // Physical frames
     pub allocations: HashMap<Addr, MemBlob>, // Keep track of allocated ram blobs (with size) for dealloc and access/info
 }
 
 impl MMU {
-    pub fn new_init(page_count: usize) -> Self {
+    pub fn new_init() -> Self {
+        let mut base = 0;
+        let free_list = Vec::from_iter(std::iter::from_fn(move || {
+            let res = if base >= MEM_CTXT.physical_mem_sz as Addr {
+                None
+            } else {
+                const PGSZ: u32 = MEM_CTXT.page_size as u32;
+                Some(Page {
+                    data: [0; PGSZ as usize],
+                    addr: base,
+                })
+            };
+
+            base += MEM_CTXT.page_size as u32;
+            res
+        }));
+
         MMU {
-            active: vec![false; page_count],
+            free_list,
+            used_list: vec![],
             allocations: HashMap::new(),
         }
     }
 }
 
-/// A SRAM bank model, acting as a mere allocation pool without any time-sync and alignment constraint, allied with memory context and an [MMU][MMU].
+/// A SRAM bank model, acting as a mere allocation pool allied with memory context and an [MMU][MMU].
 ///
 #[derive(Debug)]
 pub struct Memory<'a> {
     pub mmu: MMU,
     pub context: &'a MemContext,
-    pub ram: Ram, // Mem words are 8-bit wide
-    pub free_list: Vec<Page>,
+    pub ram: Ram,
 }
 
 impl<'a> Memory<'a> {
-    pub fn new(memctxt: &'a MemContext) -> Self {
-        let b: u8 = 2;
+    pub fn new() -> Self {
         let stack = Stack {
-            base: memctxt.stack_base as u64,
+            base: MEM_CTXT.stack_base as Addr,
             sz: 0,
-            cap: memctxt.stack_sz as u64,
+            cap: MEM_CTXT.stack_sz as Addr,
             sp: 0,
         };
-        let free_list = Vec::from_iter(std::iter::repeat(Page()).take(memctxt.page_count as usize));
+
         Self {
-            mmu: MMU::new_init(memctxt.page_count),
-            context: memctxt,
-            ram: Ram::new(b.pow(memctxt.phys_bitw as u32) as usize, stack),
-            free_list,
+            mmu: MMU::new_init(),
+            context: &MEM_CTXT,
+            ram: Ram::new(MEM_CTXT.page_count as usize, stack), // Allocate for `page_count` pages
         }
     }
 
     // All access operations are physical-level //
-    // and should be invoked after translation process //
+    // and thus should be invoked after translation process //
+    // i.e.: `addr` is a physical address //
 
-    fn _at(&self, addr: Addr) -> MemResult<&Byte> {
-        self.ram
+    fn read_at<T>(&self, addr: Addr) -> MemResult<&[Byte]> {
+        Ok(self
+            .ram
             ._in
-            .get(addr as usize)
-            .ok_or(Fault::_from(FaultType::AddrOutOfRange(addr)))
-    }
-
-    fn _at_mut(&mut self, addr: Addr) -> MemResult<&mut Byte> {
-        self.ram
-            ._in
-            .get_mut(addr as usize)
-            .ok_or(Fault::_from(FaultType::AddrOutOfRange(addr)))
-    }
-    /// Reads word at `addr`
-    pub fn _read_at_addr(&self, addr: Addr) -> MemResult<Byte> {
-        self._at(addr).map(|x| *x) // u8s are easy to copy :D
+            .get((addr / (MEM_CTXT.page_size as u32)) as usize)
+            .ok_or(Fault::_from(FaultType::AddrOutOfRange(addr)))?
+            .read::<T>(addr))
     }
 
     /// Reads word at `addr`, checking if this word is allocated yet.
-    pub fn _read_at_addr_checked(&self, addr: Addr) -> Option<MemResult<u8>> {
+    pub fn _read_at_checked<T>(&self, addr: Addr) -> Option<MemResult<&[u8]>> {
         self.mmu.allocations.get(&addr)?;
-        Some(self._read_at_addr(addr))
+
+        Some(self.read_at::<T>(addr))
     }
 
     /// Writes a singular byte at `addr`.
     /// Mostly used in a non-allocation-guarded context.
-    pub fn _write_at_addr(&mut self, addr: Addr, byte: Byte) -> EmptyO {
+    fn _write_at_addr<T>(&mut self, addr: Addr, bytes: &[u8]) -> EmptyO {
         // e.g.: Write no-alloc
-        let a = self._at_mut(addr).ok()?;
-        *a = byte;
+        self.ram
+            ._in
+            .get_mut((addr / (MEM_CTXT.page_size as u32)) as usize)
+            .ok_or(Fault::_from(FaultType::AddrOutOfRange(addr)))
+            .ok()?
+            .write::<T>(addr, bytes);
         Some(())
     }
 
     /// Writes a singular byte at `addr`, checking if this word is allocated yet.
     /// To be used in an allocation-guarded context.
-    pub fn _write_at_addr_checked(&mut self, addr: Addr, byte: Byte) -> EmptyO {
+    pub fn _write_at_addr_checked<T>(&mut self, addr: Addr, bytes: &[Byte]) -> EmptyO {
         self.mmu.allocations.get(&addr).is_none().then(|| ())?;
-        self._write_at_addr(addr, byte);
+
+        self._write_at_addr::<T>(addr, bytes);
         Some(())
     }
+
+    /// Allocates (without writing) `n` consecutive bytes starting at address `addr`.
+    pub fn _alloc(&mut self, addr: Addr, n: usize) {}
 
     pub fn _dealloc(&mut self, addr: Addr) -> EmptyO {
         self.mmu.allocations.remove(&addr).map(|_| ())
@@ -194,134 +208,53 @@ impl<'a> Memory<'a> {
 
     // Stack
     pub fn _push(&mut self, byte: Byte) -> MemResult<()> {
-        *self._at_mut(self.ram.stack.sp)? = byte;
+        self._write_at_addr::<Byte>(self.ram.stack.sp, &[byte]);
         self.ram.stack._push_sp();
         Ok(())
     }
 
-    pub fn _pop(&mut self) -> MemResult<u8> {
-        let r = *self._at(self.ram.stack.sp)?;
-        self.ram.stack._pop_sp()?;
-        Ok(r)
+    // Always pop a singular byte from stack using `_pop`
+    pub fn _pop(&mut self) -> MemResult<&Byte> {
+        self.ram.stack._pop_sp()?; // Pop occurs before to prevent reference conflict
+        let r = self.read_at::<Byte>(self.ram.stack.sp)?;
+        Ok(&r[0])
     }
     //
 }
 
 /// Machine ram context, referencing bitmode, several paging masks and information about the paging machine
-/// preset according to the bitmode.
-#[derive(Deserialize, Debug, PartialEq, Eq)]
-pub struct MemContext {
-    pub bitmode: BitMode,
-    pub lvl_mask: u64,
-    pub off_mask: u64,
-    pub page_size: u32, // Page size is constant across vmem and pmem
-    pub page_count: usize,
-    // multilevel: bool,
-    pub pt_levels: u8,
-    pub v_addr_lvl_len: u8,
-    pub v_addr_off_len: u8,
-    pub phys_bitw: u8,
-    pub stack_base: usize,
-    pub stack_sz: usize,
-    // Not in config //
-    pub physical_mem_sz: u64, // In words
-}
-
-impl MemContext {
-    // /!\
-    fn _new(
-        bitmode: BitMode,
-        lvl_mask: u64,
-        off_mask: u64,
-        page_size: u32,
-        page_count: usize,
-        //multilevel: bool,
-        pt_levels: u8,
-        v_addr_lvl_len: u8,
-        v_addr_off_len: u8,
-        phys_bitw: u8,
-        stack_base: usize,
-        stack_sz: usize,
-    ) -> Self {
-        Self {
-            bitmode,
-            lvl_mask,
-            off_mask,
-            page_size,
-            page_count,
-            //multilevel,
-            pt_levels,
-            v_addr_lvl_len,
-            v_addr_off_len,
-            phys_bitw,
-            stack_base,
-            stack_sz,
-            physical_mem_sz: BIT_BASE.pow(phys_bitw as u32),
-        }
-    }
-
-    pub fn new() -> Self {
-        MemContext::_from_bit_mode_compiled()
-    }
-
-    /// Parse a ram context from a json configuration referencing the different fields of `MemContext`.
-    ///
-    /// Substitution to `_from_bit_mode_compiled`.
-    pub fn from_json(path: &str) -> Result<MemContext, serde_json::Error> {
-        let json: String = fs::read_to_string(path).unwrap();
-        let mut ctxt: MemContext = serde_json::from_str(&json)?;
-        ctxt.physical_mem_sz = BIT_BASE.pow(ctxt.physical_mem_sz as u32);
-        Ok(ctxt)
-    }
-
-    /// Use the conditionally-compiled paging constants to returned a fresh, pre-configured ram context.
-    ///
-    /// Relevant magic values can be found at `./config.rs`.
-    pub fn _from_bit_mode_compiled() -> Self {
-        use config::bitmode::*;
-
-        Self {
-            bitmode: _BIT_MODE,
-            lvl_mask: _LVL_MASK,
-            off_mask: _OFF_MASK,
-            page_size: _PAGE_SIZE,
-            page_count: _PAGE_COUNT,
-            pt_levels: _PT_LEVELS,
-            v_addr_lvl_len: _V_ADDR_LVL_LEN,
-            v_addr_off_len: _V_ADDR_OFF_LEN,
-            phys_bitw: _PHYS_BITW,
-            stack_base: STACK_BASE,
-            stack_sz: STACK_SZ,
-            physical_mem_sz: BIT_BASE.pow(_PHYS_BITW as u32),
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
-    use super::MemContext;
-    pub use super::config::JSON_PREFIX;
-
     #[test]
     #[cfg(feature = "bit32")]
-    fn from_js_32b() {
-        println!("{}", JSON_PREFIX);
-        let memctxt = MemContext::new(); // Set for 32b
+    fn mem_new_32b() {
+        use crate::mem::MEM_CTXT;
+        use crate::mem::Memory;
 
-        let from_js = MemContext::from_json(&format!("bitmodes/{}b.json", JSON_PREFIX)).unwrap();
-        assert_eq!(memctxt, from_js);
-        //
+        let mem: Memory<'_> = Memory::new();
+        // println!("{:?}", mem.free_list);
+        let itr = mem.mmu.free_list.windows(2);
+        for i in itr {
+            let a = i[0].addr;
+            let b = i[1].addr;
+            assert_eq!(b - a, MEM_CTXT.page_size as u32);
+        }
     }
 
     #[test]
     #[cfg(feature = "bit8")]
-    fn from_js_8b() {
-        use super::JSON_PREFIX;
+    fn mem_new_8b() {
+        use crate::mem::MEM_CTXT;
+        use crate::mem::Memory;
 
-        let memctxt = MemContext::new(); // Set for 8b
-
-        let from_js = MemContext::from_json(&format!("bitmodes/{}b.json", JSON_PREFIX)).unwrap();
-        assert_eq!(memctxt, from_js);
-        //
+        let mem = Memory::new();
+        // println!("{:?}", mem.free_list);
+        let itr = mem.free_list.windows(2);
+        for i in itr {
+            let a = i[0].0;
+            let b = i[1].0;
+            assert_eq!(b - a, MEM_CTXT.page_size as u64);
+        }
     }
 }

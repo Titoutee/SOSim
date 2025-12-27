@@ -24,6 +24,7 @@ pub struct Process<'a> {
     pub mem: &'a Memory<'a>, // Back up reference to main mem
     // pub ctxt: ProcContext,
     pub pt: PageTable,
+    // pub v_space_free: Vec<Page<SZ>>, // Virtual pages
 }
 
 impl<'a> Process<'a> {

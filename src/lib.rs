@@ -4,7 +4,7 @@
 
 use process::Process;
 
-use crate::mem::{MemContext, Memory, paging::PageTable};
+use crate::mem::{Memory, config::MemContext, paging::PageTable};
 
 pub mod ext;
 pub mod fault;
@@ -21,8 +21,8 @@ pub struct Machine<'a> {
 }
 
 impl<'a> Machine<'a> {
-    pub fn new(ctxt: &'a MemContext) -> Machine<'a> {
-        let mem = Memory::new(ctxt);
+    pub fn new() -> Machine<'a> {
+        let mem = Memory::new();
         Machine {
             id_c: 0,
             processes: vec![],

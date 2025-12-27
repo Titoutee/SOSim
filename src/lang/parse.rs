@@ -7,7 +7,7 @@ use peg;
 pub type Identifier = String;
 pub type Scalar = i8;
 pub type Aggr = Vec<Scalar>;
-pub type AddrToParse = u64;
+pub type AddrToParse = Addr;
 
 trait _Aggr<T> {
     fn from_(i: T) -> Self;
@@ -183,7 +183,7 @@ mod test {
 
     #[test]
     #[should_panic]
-    fn ill_command_sc() {
+    fn ill_command_semicolon() {
         // We use alloc here but any command missing a semicolon is ill_formed really
         let cmd = "alloc 24 0";
         parser::cmd(cmd).unwrap();

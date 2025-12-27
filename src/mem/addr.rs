@@ -1,6 +1,6 @@
 use super::MemContext;
 
-pub type Addr = u64;
+pub type Addr = u32;
 
 // mere testing
 pub fn _mask(mut raw: u64, ctxt: &MemContext, idx: u8) -> u64 {
@@ -89,17 +89,17 @@ impl VirtualAddress {
 #[cfg(test)]
 
 mod tests {
-    use crate::mem::MemContext;
 
     const raw_addr: u64 = 0b0000000000000000111100000000001111111111000000000011111111110000;
 
     #[cfg(feature = "bit32")]
     #[test]
     fn vaddr_from_raw_addr_64b() {
+        use crate::mem::MEM_CTXT;
+
         use super::VirtualAddress;
 
-        let ctxt = MemContext::new();
-        let vaddr = dbg!(VirtualAddress::from_addr(raw_addr, &ctxt));
+        let vaddr = dbg!(VirtualAddress::from_addr(raw_addr, &MEM_CTXT));
         let offset = 0b111111110000;
         let lvl1 = 0b000000011;
         let lvl2 = 0b111111000;

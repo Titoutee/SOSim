@@ -1,14 +1,9 @@
-use clap::{Parser, Subcommand};
-use num_cpus::get;
+use clap::Parser;
 use sosim::{
     Machine,
     lang::{script::parse_src, toplevel::TopLevel},
-    mem::{MemContext, paging::PTEntry},
 };
-use std::{
-    fs::read_to_string,
-    net::{Ipv4Addr, SocketAddrV4},
-};
+use std::{fs::read_to_string, net::SocketAddrV4};
 
 #[cfg(any(
     all(feature = "bit16", feature = "bit32"),
@@ -30,12 +25,12 @@ struct Cli {
     socket: Option<SocketAddrV4>, // Parsed from standard string parsing format: a.d.d.r:port
 }
 
+#[allow(unused)]
 #[tokio::main]
 async fn main() {
     // println!("{}", size_of::<PTEntry>());
     // println!("align of S: {}", std::mem::align_of::<PTEntry>());
-    let memctxt = MemContext::new();
-    let machine = Machine::new(&memctxt);
+    let machine = Machine::new();
 
     // Process adding...
 

@@ -94,9 +94,7 @@ Here are referenced the different paging contexts for each bitmode (_64-bit_ sti
 |   | PT entries | Page size | PT levels | VPN length | V-addr offset length |
 |:-:|:----------:|:---------:|:---------:|:-------------------:|:--------------------:|
 | **8-bit**      |-|-|-|-|-|
-| **16-bit**     |-|-|-|-|-|
-| **32-bit**     |-|-|-|-|-|
-| **64-bit**   |512|4KB|4|9b|12b|
+| **32-bit**   |512|4KB|4|9b|12b|
 
 ---
 

@@ -7,3 +7,6 @@ pub mod toplevel;
 
 pub use script::parse_src;
 pub use toplevel::TopLevel;
+
+pub type Byte = u8;
+pub struct Struct<const N: usize>([Byte; N]);
