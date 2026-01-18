@@ -4,7 +4,7 @@
 
 use process::Process;
 
-use crate::mem::{Memory, config::MemContext, paging::PageTable};
+use crate::mem::{Memory, config::MEM_CTXT, paging::PageTable};
 
 pub mod ext;
 pub mod fault;
@@ -16,7 +16,7 @@ pub type ProcessList<'a> = Vec<Process<'a>>;
 
 pub struct Machine<'a> {
     id_c: usize,
-    mem: Memory<'a>,
+    mem: Memory,
     processes: ProcessList<'a>,
 }
 
@@ -39,7 +39,7 @@ impl<'a> Machine<'a> {
         let p = Process {
             id: self.id_c,
             mem: &self.mem,
-            pt: PageTable::new_init(self.mem.context.page_count as usize),
+            pt: PageTable::new_init(MEM_CTXT.page_count as usize),
         };
         self.processes.push(p);
         self.id_c += 1;
@@ -54,9 +54,5 @@ impl<'a> Machine<'a> {
         let _ = self.processes.get(id)?;
         self.processes.remove(id);
         Some(())
-    }
-
-    pub fn mem_context(&self) -> &MemContext {
-        self.mem.context
     }
 }

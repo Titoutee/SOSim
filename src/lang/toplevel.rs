@@ -4,7 +4,6 @@
 use super::Command;
 use crate::lang::parse_src;
 use crate::process::Process;
-use crate::process::Signal;
 use bytes::BytesMut;
 use std::io::{self, Write};
 use std::net::{Ipv4Addr, SocketAddrV4};

@@ -15,22 +15,14 @@ use config::bitmode::Addr;
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use serde_json;
-use std::{collections::HashMap, fs};
+use std::{collections::HashMap, fs, io::Empty};
 
 use crate::lang::{Byte, Struct};
 
 #[derive(Debug)]
-pub enum RegionType {
+pub enum Segment {
     Stack,
     Neutral,
-}
-
-#[derive(Debug)]
-pub struct MemRegion {
-    // Which can apply to both address spaces (virtual) and physical mem
-    start: Addr,
-    size: usize,
-    typ: RegionType,
 }
 
 #[derive(Deserialize, Debug, PartialEq, Eq)]
@@ -43,7 +35,7 @@ pub enum BitMode {
 }
 
 #[derive(Debug)]
-pub struct MemBlob(Addr, RegionType, usize); // (addr, regiontype, size)
+pub struct MemBlob(usize); // (size)
 type EmptyO = Option<()>;
 type EmptyR = Result<(), ()>;
 type MemResult<T> = Result<T, Fault>;
@@ -51,12 +43,29 @@ type MemResult<T> = Result<T, Fault>;
 #[derive(Debug)]
 pub struct Stack {
     base: Addr,
-    sz: usize,
+    sz: Addr,
     sp: Addr,
     cap: Addr,
 }
 
 impl Stack {
+    // End of written stack (= stack pointer)
+    pub fn _end(&self) -> Addr {
+        // Exclusive
+        self.sp
+    }
+
+    // Equivalent to `_end`
+    pub fn _sp(&self) -> Addr {
+        self.sp
+    }
+
+    // End of allocated stack >= `_end`
+    pub fn _end_cap(&self) -> Addr {
+        // Exclusive
+        self.base + self.sz
+    }
+
     pub fn _push_sp(&mut self) {
         self.sp += 1;
     }
@@ -97,6 +106,16 @@ impl Ram {
             stack,
         }
     }
+
+    /// The page base address which contains the desired address
+    pub fn get_page_of_addr(&self, base: Addr) -> Option<&Page> {
+        for p in self._in.iter() {
+            if p.addr == base {
+                return Some(&p);
+            }
+        }
+        None
+    }
 }
 
 #[derive(Debug)]
@@ -117,6 +136,7 @@ impl MMU {
                 Some(Page {
                     data: [0; PGSZ as usize],
                     addr: base,
+                    proc_id: None,
                 })
             };
 
@@ -133,28 +153,37 @@ impl MMU {
 }
 
 /// A SRAM bank model, acting as a mere allocation pool allied with memory context and an [MMU][MMU].
-///
 #[derive(Debug)]
-pub struct Memory<'a> {
+pub struct Memory {
     pub mmu: MMU,
-    pub context: &'a MemContext,
     pub ram: Ram,
 }
 
-impl<'a> Memory<'a> {
+impl Memory {
     pub fn new() -> Self {
         let stack = Stack {
             base: MEM_CTXT.stack_base as Addr,
             sz: 0,
             cap: MEM_CTXT.stack_sz as Addr,
-            sp: 0,
+            sp: MEM_CTXT.stack_base,
         };
 
         Self {
             mmu: MMU::new_init(),
-            context: &MEM_CTXT,
             ram: Ram::new(MEM_CTXT.page_count as usize, stack), // Allocate for `page_count` pages
         }
+    }
+
+    pub fn get_segment_of(&self, addr: Addr) -> Segment {
+        if addr >= self.ram.stack.base && addr < self.ram.stack._end_cap() {
+            Segment::Stack
+        } else {
+            Segment::Neutral
+        }
+    }
+
+    pub fn get_page_of(&self, addr: Addr) -> Option<&Page> {
+        self.ram.get_page_of_addr(addr)
     }
 
     // All access operations are physical-level //
@@ -200,13 +229,52 @@ impl<'a> Memory<'a> {
     }
 
     /// Allocates (without writing) `n` consecutive bytes starting at address `addr`.
-    pub fn _alloc(&mut self, addr: Addr, n: usize) {}
+    pub fn _alloc(&mut self, addr: Addr, n: usize) {
+        self.mmu.allocations.insert(addr, MemBlob(n));
+    }
 
+    // Checks for no conflict with stack and other already present allocations
+    pub fn _alloc_checked(&mut self, addr: Addr, n: usize) {
+        if self.mmu.allocations.get(&addr).is_some() {
+            ()
+        } else if let Segment::Stack = self.get_segment_of(addr) {
+            ()
+        } else {
+            self._alloc(addr, n);
+        }
+    }
+
+    /// Deallocates without checking if there is any conflict with the stack or other processes' allocations
+    /// (one process can deallocate the resources of another through this method)
     pub fn _dealloc(&mut self, addr: Addr) -> EmptyO {
         self.mmu.allocations.remove(&addr).map(|_| ())
     }
 
-    // Stack
+    pub fn _dealloc_check_no_other(&mut self, addr: Addr, id: u8 /* Self id */) -> EmptyO {
+        let at_page = self.get_page_of(addr)?;
+        match at_page.proc_id {
+            Some(proc_id) => {
+                if id == proc_id {
+                    self._dealloc(addr)
+                } else {
+                    None
+                }
+            }
+            None => None,
+        }
+    }
+
+    /// Deallocates only if it's out of the stack (which normally requires the user to call through pop)
+    pub fn _dealloc_check_no_stack(&mut self, addr: Addr) -> EmptyO {
+        if let Segment::Neutral = self.get_segment_of(addr) {
+            self.mmu.allocations.remove(&addr).map(|_| ());
+            Some(())
+        } else {
+            None // Warn that nothing could be deallocated 
+        }
+    }
+
+    // Always push a singular byte from stack using `_push`
     pub fn _push(&mut self, byte: Byte) -> MemResult<()> {
         self._write_at_addr::<Byte>(self.ram.stack.sp, &[byte]);
         self.ram.stack._push_sp();
@@ -219,7 +287,6 @@ impl<'a> Memory<'a> {
         let r = self.read_at::<Byte>(self.ram.stack.sp)?;
         Ok(&r[0])
     }
-    //
 }
 
 /// Machine ram context, referencing bitmode, several paging masks and information about the paging machine
@@ -232,7 +299,7 @@ mod tests {
         use crate::mem::MEM_CTXT;
         use crate::mem::Memory;
 
-        let mem: Memory<'_> = Memory::new();
+        let mem: Memory = Memory::new();
         // println!("{:?}", mem.free_list);
         let itr = mem.mmu.free_list.windows(2);
         for i in itr {

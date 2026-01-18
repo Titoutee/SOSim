@@ -21,7 +21,7 @@ pub enum Signal {
 /// A single `Process` instantiated into main memory. It has its own `PageTable` and process context.
 pub struct Process<'a> {
     pub id: usize,
-    pub mem: &'a Memory<'a>, // Back up reference to main mem
+    pub mem: &'a Memory, // Back up reference to main mem
     // pub ctxt: ProcContext,
     pub pt: PageTable,
     // pub v_space_free: Vec<Page<SZ>>, // Virtual pages

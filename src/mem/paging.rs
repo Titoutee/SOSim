@@ -113,26 +113,22 @@ pub struct PageDirectory {
 pub enum Flag {
     Present,
     Writable,
-    Accessed,
-    Dirty,
 }
 
-pub const PTXSHIFT: usize = 12;
-
 #[derive(Clone, Copy)]
-pub struct PageTableEntry(u32);
+pub struct PageTableEntry(u64);
 
 impl PageTableEntry {
-    pub(crate) fn new(ppn: u32) -> Self {
-        Self(ppn << PTXSHIFT & !0xFFF)
+    pub(crate) fn new(addr: u32) -> Self {
+        Self((addr as u64) << MEM_CTXT.phys_bitw & !0xFFFu64)
     }
+
+    // Everything is little-endian
 
     pub fn get_flag(&self, flag: Flag) -> bool {
         match flag {
             Flag::Present => self.0 & 1 == 1,
             Flag::Writable => (self.0 >> 1) & 1 == 1,
-            Flag::Accessed => (self.0 >> 5) & 1 == 1,
-            Flag::Dirty => (self.0 >> 6) & 1 == 1,
         }
     }
 
@@ -140,23 +136,18 @@ impl PageTableEntry {
         match flag {
             Flag::Present => self.0 |= 1,
             Flag::Writable => self.0 |= 1 << 1,
-            Flag::Accessed => self.0 |= 1 << 5,
-            Flag::Dirty => self.0 |= 1 << 6,
         }
     }
 
     pub fn clear_flag(&mut self, flag: Flag) {
         match flag {
-            Flag::Present => self.0 &= !(1u32),
-            Flag::Writable => self.0 &= !(1u32 << 1),
-
-            Flag::Accessed => self.0 &= !(1u32 << 5),
-            Flag::Dirty => self.0 &= !(1u32 << 6),
+            Flag::Present => self.0 &= !(1u64),
+            Flag::Writable => self.0 &= !(1u64 << 1),
         }
     }
 
     pub fn get_address(&self) -> Addr {
-        self.0 & !0xFFFu32
+        (self.0 & !0xFFFu64) as u32
     }
 }
 
@@ -207,27 +198,34 @@ mod tests {
     // }
 }
 
-use std::{ops::Add, vec::Vec};
+use std::vec::Vec;
 
 #[derive(Copy, Clone, Debug)]
 pub struct Page {
     pub data: [u8; MEM_CTXT.page_size as usize],
     // ref_count: usize,
     pub addr: Addr,
+    pub proc_id: Option<u8>, // None = unallocated
 }
 
 static ZERO_PAGE: Page = Page {
     data: [0; MEM_CTXT.page_size],
     addr: 0,
+    proc_id: None, // No one owns ZERO.
 };
 
 impl Page {
-    pub(crate) fn new(addr: u32) -> Self {
+    pub(crate) fn new(addr: Addr, id: u8) -> Self {
         Self {
             data: [0; MEM_CTXT.page_size as usize],
             // ref_count: 0,
             addr,
+            proc_id: Some(id),
         }
+    }
+
+    pub fn is_in(&self, addr: Addr) -> bool {
+        (MEM_CTXT.page_size as u32 > addr - self.addr) && (addr - self.addr) >= 0
     }
 
     // T can be a single u8 or a Struct (which is essentially a [u8, _])
@@ -282,82 +280,3 @@ impl Page {
         self.write::<[u8; MEM_CTXT.page_size]>(0, &other.data);
     }
 }
-
-struct Memory {
-    free_list: Vec<Page>,
-    used_list: Vec<Page>,
-    // zero_page: &'static Page,
-}
-
-impl Memory {
-    fn new() -> Self {
-        let mut v: Vec<Page> = Vec::new();
-        for ppn in 1..32 {
-            v.push(Page::new(32 - ppn));
-        }
-        Self {
-            free_list: v,
-            used_list: Vec::new(),
-            // zero_page: &ZERO_PAGE,
-        }
-    }
-
-    fn pop_free(&mut self) -> Option<Page> {
-        self.free_list.pop().map(|mut page| {
-            page.zero();
-            page
-        })
-    }
-
-    fn push_free(&mut self, page: Page) {
-        self.free_list.push(page);
-    }
-
-    fn push_used(&mut self, page: Page) {
-        self.used_list.push(page);
-    }
-
-    fn remove_used(&mut self, page: &Page) -> Option<Page> {
-        let mut idx = self.used_list.len();
-        for i in 0..self.used_list.len() {
-            if self.used_list[i].addr == page.addr {
-                idx = i;
-            }
-        }
-        if idx != self.used_list.len() {
-            return Some(self.used_list.remove(idx));
-        }
-        return None;
-    }
-
-    fn used_peek(&mut self) -> Option<&mut Page> {
-        let idx = self.used_list.len() - 1;
-        self.used_list.get_mut(idx)
-    }
-}
-
-// pub fn kinit() {
-//     unsafe { MEM = Memory::new() }
-// }
-
-// pub fn kalloc<const SZ: usize>() -> Option<&'static mut Page<SZ>> {
-//     unsafe {
-//         match MEM.pop_free() {
-//             Some(mut page) => {
-//                 // page.increment_refs();
-//                 MEM.push_used(page);
-//                 MEM.used_peek()
-//             }
-//             None => None,
-//         }
-//     }
-// }
-
-// pub fn kfree<const SZ: usize>(page: &Page<SZ>) {
-//     if page.addr == 0 {
-//         return;
-//     }
-//     unsafe {
-//         MEM.push_free(MEM.remove_used(page).unwrap());
-//     }
-// }

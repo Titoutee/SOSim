@@ -75,8 +75,8 @@ pub mod bitmode {
     pub const _PT_LEVELS: u8 = 4;
     pub const _V_ADDR_LVL_LEN: u8 = 9;
     pub const _V_ADDR_OFF_LEN: u8 = 12;
-    pub const _PHYS_BITW: u8 = 64;
-    pub const _PTE_PHYS_ADDR_FR_MASK: u32 = 0b11111111111111111111111111111; // 29b
+    pub const _PHYS_BITW: u8 = 8;
+    pub const _PTE_PHYS_ADDR_FR_MASK: u32 = 0b11111111; // 8b
     // pub const _STACK_BASE: Addr = 0;
     // pub const _STACK_SZ: Addr = 512; // Addr for address arithmetic easiness
     pub type Addr = u32;
@@ -99,7 +99,7 @@ pub mod bitmode {
     pub const _V_ADDR_LVL_LEN: u8 = 9;
     pub const _V_ADDR_OFF_LEN: u8 = 12;
     pub const _PHYS_BITW: u8 = 32;
-    pub const _PTE_PHYS_ADDR_FR_MASK: u32 = 0b11111111111111111111111111111; // 29b 
+    pub const _PTE_PHYS_ADDR_FR_MASK: u32 = 0b11111111111111111111111111111111; // 32b 
     // pub const _STACK_BASE: Addr = 0;
     // pub const _STACK_SZ: Addr = 512; // Addr for address arithmetic easiness
     pub type Addr = u32;
