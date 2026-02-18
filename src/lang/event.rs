@@ -3,6 +3,8 @@
 /// This permits to perform step by step allocation tests on mem, which makes it more handy to play with attacks following
 /// a progressive scheme.
 
+/// This module is CURRENTLY NOT IN USE
+
 #[allow(unused)]
 type Op = fn(String) -> ();
 

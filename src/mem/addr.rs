@@ -1,9 +1,12 @@
+use crate::mem::config::MEM_CTXT;
+
 use super::MemContext;
 
-pub type Addr = u32;
+pub type Addr = u32; // Address are limited to 32-bit as the machine supports simulation only up to 32-bit
+pub type RawAddr = u64;
 
-// mere testing
-pub fn _mask(mut raw: u64, ctxt: &MemContext, idx: u8) -> u64 {
+// mere testing of masks
+pub fn _mask(mut raw: Addr, ctxt: &MemContext, idx: u8) -> Addr {
     assert!(idx < ctxt.pt_levels);
 
     let lmask = ctxt.lvl_mask;
@@ -53,19 +56,24 @@ impl VirtualAddress {
         }
     }
 
+    /// A "phantom" VirtualAddress has its `lvl1` field set to `None`, which basically inicates a no-translation address.
+    fn is_phantom(&self) -> bool {
+        self.lvl1.is_none()
+    }
+
     // Context-wise
     // (!)
-    /// Creates a VAddr from the raw field-cut format bit-set, in a manner depending on the running bitmode
-    pub fn from_addr(_raw: u64 /*(!)*/, memctxt: &MemContext) -> Self {
+    /// Creates a VAddr from the raw field-format bit-set, in a manner depending on the running bitmode
+    pub fn from_addr(_raw: RawAddr) -> Self {
         // Sign extension is ignored and does not produce any error if incorrect (aka if not copy of MSB)
 
-        let offset = (_raw & (memctxt.off_mask as u64)) as u16;
+        let offset = (_raw & (MEM_CTXT.off_mask) as u64) as u16;
         let mut lvls = [None; 4];
-        let mut lvls_bin = _raw >> memctxt.v_addr_off_len;
+        let mut lvls_bin = _raw >> MEM_CTXT.v_addr_off_len;
 
-        for i in 0..(memctxt.pt_levels) as usize {
-            lvls[i] = Some((lvls_bin & memctxt.lvl_mask as u64) as u16);
-            lvls_bin = lvls_bin >> (memctxt.v_addr_lvl_len as usize);
+        for i in 0..(MEM_CTXT.pt_levels) as usize {
+            lvls[i] = Some((lvls_bin & MEM_CTXT.lvl_mask as u64) as u16);
+            lvls_bin = lvls_bin >> (MEM_CTXT.v_addr_lvl_len as usize);
             /* levels share the same mask */
         }
 
@@ -90,22 +98,19 @@ impl VirtualAddress {
 
 mod tests {
 
-    const raw_addr: u64 = 0b0000000000000000111100000000001111111111000000000011111111110000;
+    const RAW_ADDR: u64 = 0b0000000000000000111100000000001111111111000000000011111111110000;
 
     #[cfg(feature = "bit32")]
     #[test]
-    fn vaddr_from_raw_addr_64b() {
-        use crate::mem::MEM_CTXT;
-
+    fn vaddr_from_raw_addr_32b() {
         use super::VirtualAddress;
 
-        let vaddr = dbg!(VirtualAddress::from_addr(raw_addr, &MEM_CTXT));
+        let vaddr = dbg!(VirtualAddress::from_addr(RAW_ADDR));
         let offset = 0b111111110000;
         let lvl1 = 0b000000011;
         let lvl2 = 0b111111000;
         let lvl3 = 0b000001111;
         let lvl4 = 0b111100000;
-        // _mask(raw_addr, &ctxt, 4);
         assert_eq!(offset, vaddr.offset);
         assert_eq!(lvl1, vaddr.lvl1.unwrap());
         assert_eq!(lvl2, vaddr.lvl2.unwrap());

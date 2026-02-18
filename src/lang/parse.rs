@@ -25,6 +25,8 @@ impl<T> _Aggr<T> for Vec<T> {
     }
 }
 
+/// Extension trait for unwrapping command lists. Convenient for unwrapping a single-command list.
+#[allow(dead_code)]
 pub trait Unwrap<U> {
     fn unwrap_(&self) -> Option<&U>;
 }
@@ -75,7 +77,7 @@ pub enum Command {
     Empty, // Init
 }
 
-// Mini-lang parsing
+// Main lang parser
 peg::parser! {
     pub grammar parser() for str {
         rule _ = quiet!{[' ' | '\n' | '\t']*}

@@ -11,6 +11,8 @@ use crate::{
         paging::Page,
     },
 };
+pub const PAGE_NUMBER: u32 = MEM_CTXT.page_count;
+pub const PHYS_TOTAL: usize = (MEM_CTXT.page_count * MEM_CTXT.page_size as u32) as usize;
 use config::bitmode::Addr;
 use lazy_static::lazy_static;
 use serde::Deserialize;
@@ -34,10 +36,7 @@ pub enum BitMode {
     Bit64,
 }
 
-#[derive(Debug)]
-pub struct MemBlob(usize); // (size)
 type EmptyO = Option<()>;
-type EmptyR = Result<(), ()>;
 type MemResult<T> = Result<T, Fault>;
 
 #[derive(Debug)]
@@ -87,6 +86,14 @@ impl Stack {
         self.sp -= 1;
         Ok(())
     }
+
+    pub fn dbg(&self) {
+        println!("[Stack]");
+        println!("  - Stack size: {:x}", self.sz);
+        println!("  - Stack capacity: {:x}", self.cap);
+        println!("  - Stack base: {:x}", self.base);
+        println!("  - Stack pointer: {:x}", self.sp);
+    }
 }
 
 /// *Physical memory* consisting of one singular bank of SRAM.
@@ -116,39 +123,46 @@ impl Ram {
         }
         None
     }
+
+    pub fn dbg(&self) {
+        println!("[RAM]");
+        self.stack.dbg();
+    }
 }
 
 #[derive(Debug)]
 pub struct MMU {
-    pub free_list: Vec<Page>,
-    pub used_list: Vec<Page>,                // Physical frames
-    pub allocations: HashMap<Addr, MemBlob>, // Keep track of allocated ram blobs (with size) for dealloc and access/info
+    pub free_list: [bool; PAGE_NUMBER as usize], // Physical frames; each frame is taken whenever a process allocates it for itself
+    pub allocations: HashMap<Addr, usize>, // Keep track of allocated ram blobs (with size) for dealloc and access/info
 }
 
 impl MMU {
     pub fn new_init() -> Self {
-        let mut base = 0;
-        let free_list = Vec::from_iter(std::iter::from_fn(move || {
-            let res = if base >= MEM_CTXT.physical_mem_sz as Addr {
-                None
-            } else {
-                const PGSZ: u32 = MEM_CTXT.page_size as u32;
-                Some(Page {
-                    data: [0; PGSZ as usize],
-                    addr: base,
-                    proc_id: None,
-                })
-            };
-
-            base += MEM_CTXT.page_size as u32;
-            res
-        }));
-
         MMU {
-            free_list,
-            used_list: vec![],
+            free_list: [false; PAGE_NUMBER as usize],
+            // used_list: vec![],
             allocations: HashMap::new(),
         }
+    }
+
+    pub fn free_bytes(&self) -> usize {
+        self.free_list
+            .map(|s| if s { MEM_CTXT.page_size } else { 0 })
+            .into_iter()
+            .sum::<usize>()
+    }
+
+    pub fn dbg(&self) {
+        println!("[MMU]");
+
+        let free_bytes = self.free_bytes();
+        let total = println!(
+            " - Free space: {}B over {}B ({:.3}% available)",
+            free_bytes,
+            PHYS_TOTAL,
+            free_bytes / PHYS_TOTAL * 100
+        );
+        println!("")
     }
 }
 
@@ -174,14 +188,23 @@ impl Memory {
         }
     }
 
+    pub fn dbg(&self) {
+        println!("---------");
+        self.ram.dbg();
+        self.mmu.dbg();
+        println!("---------");
+    }
+
+    /// Get the segment type of word at `addr`
     pub fn get_segment_of(&self, addr: Addr) -> Segment {
         if addr >= self.ram.stack.base && addr < self.ram.stack._end_cap() {
             Segment::Stack
         } else {
-            Segment::Neutral
+            Segment::Neutral // = Heap
         }
     }
 
+    /// Get the page of word at `addr`
     pub fn get_page_of(&self, addr: Addr) -> Option<&Page> {
         self.ram.get_page_of_addr(addr)
     }
@@ -229,8 +252,10 @@ impl Memory {
     }
 
     /// Allocates (without writing) `n` consecutive bytes starting at address `addr`.
+    /// /!\ Low-level alloc != translation process
     pub fn _alloc(&mut self, addr: Addr, n: usize) {
-        self.mmu.allocations.insert(addr, MemBlob(n));
+        self.mmu.allocations.insert(addr, n);
+        let page_at_addr = self.get_page_of(addr); // Physical frame containing that address
     }
 
     // Checks for no conflict with stack and other already present allocations
@@ -270,18 +295,18 @@ impl Memory {
             self.mmu.allocations.remove(&addr).map(|_| ());
             Some(())
         } else {
-            None // Warn that nothing could be deallocated 
+            None // Warn that nothing could be deallocated
         }
     }
 
-    // Always push a singular byte from stack using `_push`
+    // Always push a singular byte from stack using `_push` only
     pub fn _push(&mut self, byte: Byte) -> MemResult<()> {
         self._write_at_addr::<Byte>(self.ram.stack.sp, &[byte]);
         self.ram.stack._push_sp();
         Ok(())
     }
 
-    // Always pop a singular byte from stack using `_pop`
+    // Always pop a singular byte from stack using `_pop` only
     pub fn _pop(&mut self) -> MemResult<&Byte> {
         self.ram.stack._pop_sp()?; // Pop occurs before to prevent reference conflict
         let r = self.read_at::<Byte>(self.ram.stack.sp)?;
@@ -293,35 +318,32 @@ impl Memory {
 
 #[cfg(test)]
 mod tests {
-    #[test]
     #[cfg(feature = "bit32")]
-    fn mem_new_32b() {
-        use crate::mem::MEM_CTXT;
-        use crate::mem::Memory;
+    mod inner {
+        use crate::mem::{Memory, config::MEM_CTXT};
 
-        let mem: Memory = Memory::new();
-        // println!("{:?}", mem.free_list);
-        let itr = mem.mmu.free_list.windows(2);
-        for i in itr {
-            let a = i[0].addr;
-            let b = i[1].addr;
-            assert_eq!(b - a, MEM_CTXT.page_size as u32);
+        #[test]
+        // Test miscellaneous mem values against their correspondant in cfg to check for init errors
+        fn test_against_cfg() {
+            let mem = Memory::new();
+            assert_eq!(
+                size_of_val(&mem.mmu.free_list),
+                MEM_CTXT.page_count as usize
+            );
         }
     }
 
-    #[test]
     #[cfg(feature = "bit8")]
-    fn mem_new_8b() {
-        use crate::mem::MEM_CTXT;
-        use crate::mem::Memory;
+    mod inner {
+        use crate::mem::{Memory, config::MEM_CTXT};
 
-        let mem = Memory::new();
-        // println!("{:?}", mem.free_list);
-        let itr = mem.free_list.windows(2);
-        for i in itr {
-            let a = i[0].0;
-            let b = i[1].0;
-            assert_eq!(b - a, MEM_CTXT.page_size as u64);
+        #[test]
+        fn test_against_cfg() {
+            let mem = Memory::new();
+            assert_eq!(
+                size_of_val(&mem.mmu.free_list),
+                MEM_CTXT.page_count as usize
+            );
         }
     }
 }

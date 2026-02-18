@@ -1,0 +1,4 @@
+Lien avec le thème de l'année, imposé comme suit: "Cycles et Boucles"
+
+-> Le parcours des différents niveaux de traduction d'une adresse virtuelle en une adresse physique à travers un tableau de pages multilevel
+est une structure cyclique.

@@ -1,4 +1,4 @@
-//! Faults and excpetions.
+//! Faults and exceptions.
 
 use crate::mem::addr::Addr;
 

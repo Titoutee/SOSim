@@ -15,10 +15,6 @@ pub struct PageTable {
 }
 
 impl PageTable {
-    // pub fn empty() -> Self {
-    //     PageTable { arr: vec![] }
-    // }
-
     /// Initialises the pagetable with an inner vector of capacity `_PAGE_COUNT`.
     /// This capacity should be kept untouched, as specified by the config's page table length.
     pub fn new_init(page_count: usize) -> Self {
@@ -56,58 +52,8 @@ impl PageTable {
 
 /// Multilevel page table, used by default by `32b` config.
 pub struct PageDirectory {
-    levels: [Option<PageTable>; 2],
+    levels: [Option<PageTable>; MEM_CTXT.pt_levels as usize],
 }
-
-// Used for pretending to be x86
-/// A RawPTEntry is really just a bitset encoding the specified bits and payloads.
-// pub struct RawPTEntry {
-//     bitset: u64, // std bitset for PTE format in x86_64 is 64 bit long
-// }
-//
-// impl RawPTEntry {
-//     pub fn new(bitset: u64) -> Self {
-//         Self { bitset }
-//     }
-// }
-
-// #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone)]
-// pub struct PTEntry {
-//     present: bool,
-//     write: bool,
-//     read: bool,
-//     phys_frame_addr: u64,
-// }
-//
-// impl PTEntry {
-//     pub fn new(present: bool, write: bool, read: bool, phys_frame_addr: u64) -> Self {
-//         Self {
-//             present,
-//             write,
-//             read,
-//             phys_frame_addr,
-//         }
-//     }
-// }
-//
-// // RawPTE <-> FullPTE
-// impl From<RawPTEntry> for PTEntry {
-//     fn from(r: RawPTEntry) -> Self {
-//         let bits = r.bitset;
-//
-//         let present = <bool as _From<u64>>::_from(bits & 0b1);
-//         let write = <bool as _From<u64>>::_from((bits >> 1) & 0b1);
-//         let read = <bool as _From<u64>>::_from((bits >> 2) & 0b1);
-//         let phys_frame_addr = (bits >> 3) & _PTE_PHYS_ADDR_FR_MASK;
-//
-//         Self {
-//             present,
-//             write,
-//             read,
-//             phys_frame_addr,
-//         }
-//     }
-// }
 
 #[derive(Copy, Clone)]
 pub enum Flag {
@@ -120,10 +66,10 @@ pub struct PageTableEntry(u64);
 
 impl PageTableEntry {
     pub(crate) fn new(addr: u32) -> Self {
-        Self((addr as u64) << MEM_CTXT.phys_bitw & !0xFFFu64)
+        Self((addr as u64) << MEM_CTXT.lvl_mask & !0xFFFu64)
     }
 
-    // Everything is little-endian
+    // Little-endian
 
     pub fn get_flag(&self, flag: Flag) -> bool {
         match flag {
@@ -141,13 +87,13 @@ impl PageTableEntry {
 
     pub fn clear_flag(&mut self, flag: Flag) {
         match flag {
-            Flag::Present => self.0 &= !(1u64),
+            Flag::Present => self.0 &= !(1u64), // Mask the entire entry, zero-ing only LSB
             Flag::Writable => self.0 &= !(1u64 << 1),
         }
     }
 
     pub fn get_address(&self) -> Addr {
-        (self.0 & !0xFFFu64) as u32
+        (self.0 & !0xFFFu64) as Addr
     }
 }
 
@@ -209,7 +155,7 @@ pub struct Page {
 }
 
 static ZERO_PAGE: Page = Page {
-    data: [0; MEM_CTXT.page_size],
+    data: [0; MEM_CTXT.page_size as usize],
     addr: 0,
     proc_id: None, // No one owns ZERO.
 };
@@ -277,6 +223,6 @@ impl Page {
     //  }
 
     pub fn copy(&mut self, other: &Page) {
-        self.write::<[u8; MEM_CTXT.page_size]>(0, &other.data);
+        self.write::<[u8; MEM_CTXT.page_size as usize]>(0, &other.data);
     }
 }
