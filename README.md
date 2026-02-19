@@ -24,7 +24,7 @@ SOSim is intended to be implemented as a simplist virtual machine exposing mem-a
 
 ### What does SOSim simulate?
 
-**A RAM bank with an address space size ranging from 8-bit to 64-bit addressing** is simulated, to expose a versatile set of mechanisms, trying to get near real-world architectures (e.g. SOSim can emulate a _64-bit v-address space_ and _4-level page tables_ as in _x86\_64_).
+**A RAM bank of size 8-bit or 32-bit** is simulated, to expose a versatile set of mechanisms, trying to get near real-world architectures
 
 #### Which memory architecture?
 
@@ -83,13 +83,12 @@ _Implementation details will be further documented_
 ### Architectures
 
 SOSim permits to **emulate address spaces of different bitsizes**, in order to
-observe memory attacks in deeply different contexts, from a **narrow 8-bit space
-to a large, _x86\_64_-like 64b space**. Here are the relevant information about
+observe memory attacks in deeply different contexts. Here are the relevant information about
 v-address formatting across these different contexts:
 
 #### Bitmodes
 
-Here are referenced the different paging contexts for each bitmode (_64-bit_ sticks to the _x86\_64_ standard)
+Here are referenced the different paging contexts for each bitmode
 
 |   | PT entries | Page size | PT levels | VPN length | V-addr offset length |
 |:-:|:----------:|:---------:|:---------:|:-------------------:|:--------------------:|
@@ -103,6 +102,8 @@ Here are referenced the different paging contexts for each bitmode (_64-bit_ sti
 #### Address format specification (virtual)
 
 *Each generated address is 64-bit sign-extended, and the sign extension is adjusted according to the bitmode*
+
+The extension to 64 bits allows the virtual address space to go beyond a size of 29 bit, and can even be larger than physical memory for certain demonstrations. Thus we don't use 32-bit virtual addresse, as those would clamp the address payload to 29-bit, which would lie on pretending offering a 32-bit virtual environment.
 
 | Bits |  Name  | Meaning |
 |:-----|:------:|:-------:|
@@ -135,6 +136,3 @@ The strict signal specification is summed up in the following table:
 | Write | 0x3 |
 | Read | 0x4 |
 | Debug | 0x5 |
-
-
-_Details will be further documented_

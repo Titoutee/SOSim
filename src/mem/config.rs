@@ -3,8 +3,8 @@ use crate::mem::{
     BitMode,
     addr::Addr,
     config::bitmode::{
-        _BIT_MODE, _LVL_MASK, _OFF_MASK, _PAGE_COUNT, _PAGE_SIZE, _PHYS_BITW, _PT_LEVELS,
-        _V_ADDR_LVL_LEN, _V_ADDR_OFF_LEN, _V_PAGE_COUNT,
+        _BIT_MODE, _LVL_MASK, _OFF_MASK, _PAGE_COUNT, _PAGE_SIZE, _PT_LEVELS, _V_ADDR_LVL_LEN,
+        _V_ADDR_OFF_LEN, _V_PAGE_COUNT,
     },
 };
 use serde::Deserialize;

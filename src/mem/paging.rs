@@ -1,7 +1,7 @@
 // PTE format does not exactly match the x86_64 standard, as only present, write, read bits and the address payload is are serialized
 // into the 64b bitset.
 
-use super::addr::{Addr, VirtualAddress};
+use super::addr::{Addr, Address};
 pub use crate::ext::{_From, _Into};
 use crate::mem::config::MEM_CTXT;
 
@@ -47,7 +47,7 @@ impl PageTable {
         ) // (!)
     }
 
-    pub fn translation(&self, vaddr: VirtualAddress) {}
+    pub fn translation(&self, vaddr: Address) {}
 }
 
 /// Multilevel page table, used by default by `32b` config.
@@ -171,7 +171,7 @@ impl Page {
     }
 
     pub fn is_in(&self, addr: Addr) -> bool {
-        (MEM_CTXT.page_size as u32 > addr - self.addr) && (addr - self.addr) >= 0
+        (MEM_CTXT.page_size as u32 > addr - self.addr) && (addr - self.addr) as i32 >= 0
     }
 
     // T can be a single u8 or a Struct (which is essentially a [u8, _])
@@ -191,7 +191,7 @@ impl Page {
     pub fn write<T>(
         &mut self,
         addr: Addr,
-        data: &[u8], /* The data slab to be written at addr */
+        data: &[u8], /* The data blob to be written at addr */
     ) {
         let size = std::mem::size_of::<T>(); // 1 or more bytes...?
         let s = (addr - self.addr) as usize;
@@ -213,14 +213,6 @@ impl Page {
     fn zero(&mut self) {
         self.write::<[u8; 4096]>(0, &[0; 4096]);
     }
-
-    //  pub fn increment_refs(&mut self) {
-    //      self.ref_count += 1
-    //  }
-    //
-    //  pub fn decrement_refs(&mut self) {
-    //      self.ref_count -= 1
-    //  }
 
     pub fn copy(&mut self, other: &Page) {
         self.write::<[u8; MEM_CTXT.page_size as usize]>(0, &other.data);

@@ -156,7 +156,7 @@ impl MMU {
         println!("[MMU]");
 
         let free_bytes = self.free_bytes();
-        let total = println!(
+        println!(
             " - Free space: {}B over {}B ({:.3}% available)",
             free_bytes,
             PHYS_TOTAL,
@@ -229,7 +229,7 @@ impl Memory {
         Some(self.read_at::<T>(addr))
     }
 
-    /// Writes a singular byte at `addr`.
+    /// Writes bytes at `addr`
     /// Mostly used in a non-allocation-guarded context.
     fn _write_at_addr<T>(&mut self, addr: Addr, bytes: &[u8]) -> EmptyO {
         // e.g.: Write no-alloc
@@ -255,7 +255,7 @@ impl Memory {
     /// /!\ Low-level alloc != translation process
     pub fn _alloc(&mut self, addr: Addr, n: usize) {
         self.mmu.allocations.insert(addr, n);
-        let page_at_addr = self.get_page_of(addr); // Physical frame containing that address
+        // let page_at_addr = self.get_page_of(addr); // Physical frame containing that address
     }
 
     // Checks for no conflict with stack and other already present allocations
