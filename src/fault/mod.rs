@@ -18,5 +18,6 @@ pub enum FaultType {
     NullPointerDeref(Addr),
     AddrOutOfRange(Addr),
     Unrecoverable,
+    InvalidPage,
     // ...
 }

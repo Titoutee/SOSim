@@ -2,7 +2,7 @@ use crate::mem::config::MEM_CTXT;
 
 pub type Addr = u32; // Address are limited to 32-bit as the machine supports simulation only up to 32-bit
 pub type RawAddr = u64;
-pub const KERNBASE: Addr = 0;
+pub const KERNBASE: Addr = 0; // Will probably change later on... For now kernel base is 0 
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub enum Address {
@@ -59,6 +59,9 @@ impl Physical {
     }
 
     pub fn from(ppn: u32, offset: u32, ptr: usize) -> Self {
+        // ppn is already shifted
+        // Construct a physical address from a physical page number and an offset.
+        let ppn = ppn << MEM_CTXT.v_addr_off_len;
         let paddr = ppn | offset;
         Self(Address::Physical(paddr, ptr))
     }

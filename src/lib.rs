@@ -4,7 +4,7 @@
 
 use process::Process;
 
-use crate::mem::{Memory, config::MEM_CTXT, paging::PageTable};
+use crate::mem::{Memory, config::MEM_CTXT};
 
 pub mod ext;
 pub mod fault;
@@ -32,14 +32,13 @@ impl<'a> Machine<'a> {
 
     // O(n) which is reasonable for average usecase
     pub fn get_process(&self, id: usize) -> Option<&Process<'a>> {
-        self.processes.iter().filter(|x| x.id == id).next()
+        self.processes.iter().filter(|x| x.pid == id).next()
     }
 
     pub fn create_process(&'a mut self) {
         let p = Process {
-            id: self.id_c,
+            pid: self.id_c,
             mem: &self.mem,
-            pt: PageTable::new_init(MEM_CTXT.page_count as usize),
         };
         self.processes.push(p);
         self.id_c += 1;

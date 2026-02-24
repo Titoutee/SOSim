@@ -2,7 +2,6 @@
 
 use crate::lang::Command::{self, *};
 use crate::mem::Memory;
-use crate::mem::paging::PageTable;
 
 // Signal to send to the client in responding to requests.
 // Manual discriminants correspond to the signalling specification detailed in readme.
@@ -20,11 +19,9 @@ pub enum Signal {
 
 /// A single `Process` instantiated into main memory. It has its own `PageTable` and process context.
 pub struct Process<'a> {
-    pub id: usize,
+    pub pid: usize,
     pub mem: &'a Memory, // Back up reference to main mem
     // pub ctxt: ProcContext,
-    pub pt: PageTable,
-    // pub v_space_free: Vec<Page<SZ>>, // Virtual pages
 }
 
 impl<'a> Process<'a> {

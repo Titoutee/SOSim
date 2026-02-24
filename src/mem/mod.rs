@@ -102,7 +102,7 @@ impl Stack {
 /// zinitialised according to (pre-)defined memory context settings, the stack and heap positions within main memory, etc...
 #[derive(Debug)]
 pub struct Ram {
-    pub _in: Vec<Page>,
+    pub _in: Vec<Option<Page>>,
     pub stack: Stack,
 } // (Main, Stack, SP)
 
@@ -117,11 +117,17 @@ impl Ram {
     /// The page base address which contains the desired address
     pub fn get_page_of_addr(&self, base: Addr) -> Option<&Page> {
         for p in self._in.iter() {
-            if p.addr == base {
-                return Some(&p);
+            if let Some(p) = p {
+                if p.ppn_as_addr() == base {
+                    return Some(&p);
+                }
             }
         }
         None
+    }
+
+    pub fn get_page_number_of_addr(&self, base: Addr) -> Option<u32> {
+        Some(self.get_page_of_addr(base)?.ppn())
     }
 
     pub fn dbg(&self) {
@@ -132,22 +138,56 @@ impl Ram {
 
 #[derive(Debug)]
 pub struct MMU {
-    pub free_list: [bool; PAGE_NUMBER as usize], // Physical frames; each frame is taken whenever a process allocates it for itself
+    pub free_list: Vec<Page>, // Physical frames; each frame is taken whenever a process allocates it for itself
+    pub used_list: Vec<Page>,
     pub allocations: HashMap<Addr, usize>, // Keep track of allocated ram blobs (with size) for dealloc and access/info
 }
 
 impl MMU {
     pub fn new_init() -> Self {
+        let mut free_list = vec![];
+        for ppn in 1..MEM_CTXT.page_count {
+            free_list.push(Page::new(ppn))
+        }
         MMU {
-            free_list: [false; PAGE_NUMBER as usize],
-            // used_list: vec![],
+            free_list,
+            used_list: vec![],
             allocations: HashMap::new(),
         }
     }
 
+    fn pop_free(&mut self) -> Option<Page> {
+        self.free_list.pop().map(|mut page| {
+            page.zero();
+            page
+        })
+    }
+
+    fn push_free(&mut self, page: Page) {
+        self.free_list.push(page);
+    }
+
+    fn push_used(&mut self, page: Page) {
+        self.used_list.push(page);
+    }
+
+    fn remove_used(&mut self, page: &Page) -> Option<Page> {
+        let mut idx = self.used_list.len(); // Any invalid index
+        for i in 0..self.used_list.len() {
+            if self.used_list[i].ppn == page.ppn {
+                idx = i;
+            }
+        }
+        if idx != self.used_list.len() {
+            return Some(self.used_list.remove(idx));
+        }
+        return None;
+    }
+
     pub fn free_bytes(&self) -> usize {
         self.free_list
-            .map(|s| if s { MEM_CTXT.page_size } else { 0 })
+            .iter()
+            .map(|_| MEM_CTXT.page_size)
             .into_iter()
             .sum::<usize>()
     }
@@ -213,17 +253,19 @@ impl Memory {
     // and thus should be invoked after translation process //
     // i.e.: `addr` is a physical address //
 
-    fn read_at<T>(&self, addr: Addr) -> MemResult<&[Byte]> {
+    fn read_at<T>(&self, addr: Addr) -> MemResult<Vec<Byte>> {
         Ok(self
             .ram
             ._in
             .get((addr / (MEM_CTXT.page_size as u32)) as usize)
             .ok_or(Fault::_from(FaultType::AddrOutOfRange(addr)))?
-            .read::<T>(addr))
+            .ok_or(Fault::_from(FaultType::InvalidPage))?
+            .read::<T>(addr)
+            .to_vec())
     }
 
     /// Reads word at `addr`, checking if this word is allocated yet.
-    pub fn _read_at_checked<T>(&self, addr: Addr) -> Option<MemResult<&[u8]>> {
+    pub fn _read_at_checked<T>(&self, addr: Addr) -> Option<MemResult<Vec<u8>>> {
         self.mmu.allocations.get(&addr)?;
 
         Some(self.read_at::<T>(addr))
@@ -238,6 +280,7 @@ impl Memory {
             .get_mut((addr / (MEM_CTXT.page_size as u32)) as usize)
             .ok_or(Fault::_from(FaultType::AddrOutOfRange(addr)))
             .ok()?
+            .as_mut()?
             .write::<T>(addr, bytes);
         Some(())
     }
@@ -307,10 +350,10 @@ impl Memory {
     }
 
     // Always pop a singular byte from stack using `_pop` only
-    pub fn _pop(&mut self) -> MemResult<&Byte> {
+    pub fn _pop(&mut self) -> MemResult<Byte> {
         self.ram.stack._pop_sp()?; // Pop occurs before to prevent reference conflict
         let r = self.read_at::<Byte>(self.ram.stack.sp)?;
-        Ok(&r[0])
+        Ok(r[0])
     }
 }
 

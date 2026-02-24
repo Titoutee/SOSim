@@ -101,9 +101,13 @@ Here are referenced the different paging contexts for each bitmode
 
 #### Address format specification (virtual)
 
-*Each generated address is 64-bit sign-extended, and the sign extension is adjusted according to the bitmode*
+*Each generated (virtual) address is 32-bit sign-extended*
 
-The extension to 64 bits allows the virtual address space to go beyond a size of 29 bit, and can even be larger than physical memory for certain demonstrations. Thus we don't use 32-bit virtual addresse, as those would clamp the address payload to 29-bit, which would lie on pretending offering a 32-bit virtual environment.
+Resulting physical addresses (after translation) are always 32-bit.
+
+#### Page table format specification
+
+The page table contains 64-bit entries following the following format, allowing addresses to be up to 32 bits (in 32-bit mode, that is):
 
 | Bits |  Name  | Meaning |
 |:-----|:------:|:-------:|
@@ -111,6 +115,12 @@ The extension to 64 bits allows the virtual address space to go beyond a size of
 | **1**   | Write | Write operations are permitted to this page |
 | **2**   | Read | Read operations are permitted to this page |
 | **3-63** | Address | The address payload, containing more or less extension bits depending on the bitmode |
+
+In that way, the relevant information is contained in `32 + 3 = 35` bits, which forces the usage of `u64`. Essentially, bits 35 to 63 are ALWAYS extension bits. We can represent a **little-endian** linear version of a PTE (little-endian):
+
+| Bits 3-63 | Bit 2 | Bit 1 | Bit 0 |
+|:-----|:------:|:---:|:----:|
+| Addr (with bit extension) | Read | Write | Present |
 
 #### Minilang specification
 
