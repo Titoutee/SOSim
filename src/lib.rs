@@ -4,7 +4,7 @@
 
 use process::Process;
 
-use crate::mem::{Memory, config::MEM_CTXT};
+use crate::mem::Memory;
 
 pub mod ext;
 pub mod fault;
@@ -39,6 +39,8 @@ impl<'a> Machine<'a> {
         let p = Process {
             pid: self.id_c,
             mem: &self.mem,
+            page_table: Default::default(),
+            context: Default::default(),
         };
         self.processes.push(p);
         self.id_c += 1;

@@ -4,6 +4,7 @@
 use super::addr::Addr;
 pub use crate::ext::{_From, _Into};
 use crate::mem::config::MEM_CTXT;
+use std::fmt;
 
 #[derive(Copy, Clone)]
 pub enum Flag {
@@ -48,6 +49,34 @@ impl PageTableEntry {
 
     pub fn get_ppn(&self) -> Addr {
         (self.0 & !0x7u32) as Addr // Mask the 3 LSBs, which are reserved for flags, to get the physical page number.
+    }
+}
+
+impl fmt::Display for PageTableEntry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "PTE(0x{:08x}) [", self.0)?;
+        if self.get_flag(Flag::Present) {
+            write!(f, "P")?;
+        }
+        if self.get_flag(Flag::Writable) {
+            write!(f, "W")?;
+        }
+        if self.get_flag(Flag::Read) {
+            write!(f, "R")?;
+        }
+        write!(f, "] -> 0x{:05x}", self.get_ppn())
+    }
+}
+
+impl fmt::Debug for PageTableEntry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PageTableEntry")
+            .field("raw", &format!("0x{:08x}", self.0))
+            .field("present", &self.get_flag(Flag::Present))
+            .field("writable", &self.get_flag(Flag::Writable))
+            .field("readable", &self.get_flag(Flag::Read))
+            .field("ppn", &format!("0x{:05x}", self.get_ppn()))
+            .finish()
     }
 }
 

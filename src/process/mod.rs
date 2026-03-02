@@ -3,6 +3,16 @@
 use crate::lang::Command::{self, *};
 use crate::mem::Memory;
 
+// TODO: Replace with the correct module path if PageTable is defined elsewhere
+#[derive(Debug, Default)]
+pub struct PageTable;
+
+#[derive(Debug, Default)]
+pub struct ProcessContext {
+    pub registers: [u32; 32], // General-purpose registers
+    pub pc: u32,              // Program counter
+}
+
 // Signal to send to the client in responding to requests.
 // Manual discriminants correspond to the signalling specification detailed in readme.
 // This signal specification is some sort of enum serialization.
@@ -21,7 +31,8 @@ pub enum Signal {
 pub struct Process<'a> {
     pub pid: usize,
     pub mem: &'a Memory, // Back up reference to main mem
-    // pub ctxt: ProcContext,
+    pub page_table: PageTable,
+    pub context: ProcessContext,
 }
 
 impl<'a> Process<'a> {

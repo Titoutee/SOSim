@@ -2,6 +2,7 @@ use clap::Parser;
 use sosim::{
     Machine,
     lang::{script::parse_src, toplevel::TopLevel},
+    mem::addr::Addr,
 };
 use std::{fs::read_to_string, net::SocketAddrV4};
 
@@ -23,6 +24,9 @@ struct Cli {
     // If None, then simulator launched in dynamic toplevel interpreter mode
     #[arg(short, long)]
     socket: Option<SocketAddrV4>, // Parsed from standard string parsing format: a.d.d.r:port
+
+    #[arg(short, long)]
+    stack_sz: Addr,
 }
 
 #[allow(unused)]
@@ -32,7 +36,7 @@ async fn main() {
     // println!("align of S: {}", std::mem::align_of::<PTEntry>());
     let machine = Machine::new();
 
-    // Process adding...
+    // Process...
 
     println!("Max. concurrent processes number: {}", num_cpus::get());
 
