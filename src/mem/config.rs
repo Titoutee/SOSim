@@ -4,7 +4,7 @@ use crate::mem::{
     addr::Addr,
     config::bitmode::{
         _BIT_MODE, _LVL_MASK, _OFF_MASK, _PAGE_COUNT, _PAGE_SIZE, _PT_LEVELS, _V_ADDR_LVL_LEN,
-        _V_ADDR_OFF_LEN, _V_PAGE_COUNT,
+        _V_ADDR_OFF_LEN, _V_PAGE_COUNT, _ZERO_PAGE_PPN,
     },
 };
 use serde::Deserialize;
@@ -23,6 +23,7 @@ pub struct MemContext {
     pub v_addr_off_len: u8, // Length of v_addr offset segment
     pub stack_base: Addr,   // Stack base address
     pub stack_sz: Addr,     // Stack size
+    pub zero_page_ppn: u32,
     // Not in config //
     pub physical_mem_sz: u64, // Physical memory bit size
     pub virtual_mem_sz: u64,  // Virtual address space bit size (equal accross all processes)
@@ -42,6 +43,7 @@ pub const MEM_CTXT: MemContext = MemContext {
     stack_sz: _STACK_SZ,
     physical_mem_sz: (_PAGE_COUNT as u64) * (_PAGE_SIZE as u64),
     v_page_count: _V_PAGE_COUNT,
+    zero_page_ppn: _ZERO_PAGE_PPN,
 };
 
 /////////// main ///////////
@@ -57,7 +59,7 @@ pub const _PTE_LEN: u8 = 64;
 // pub const PTE_W_MASK: u64 = 0b1;
 // pub const PTE_R_MASK: u64 = 0b1;
 
-// No, stack is just really for stack overflow testing, let's keep it smol :D
+// Stack is just really for stack overflow testing, let's keep it smol :D
 
 pub const _STACK_BASE: Addr = 0;
 pub const _STACK_SZ: Addr = 64;
@@ -79,6 +81,7 @@ pub mod bitmode {
     pub const _V_ADDR_OFF_LEN: u8 = 12;
     pub const _PHYS_BITW: u8 = 8;
     pub const _PTE_PHYS_ADDR_FR_MASK: u32 = 0b11111111; // 8b
+    pub const _ZERO_PAGE_PPN: u32 = 0;
     // pub const _STACK_BASE: Addr = 0;
     // pub const _STACK_SZ: Addr = 512; // Addr for address arithmetic easiness
     pub type Addr = u32;
@@ -103,6 +106,7 @@ pub mod bitmode {
     pub const _V_ADDR_OFF_LEN: u8 = 12;
     pub const _PHYS_BITW: u8 = 32;
     pub const _PTE_PHYS_ADDR_FR_MASK: u32 = 0b11111111111111111111111111111111; // 32b 
+    pub const _ZERO_PAGE_PPN: u32 = 0; // Physical page number for the zero page
     // pub const _STACK_BASE: Addr = 0;
     // pub const _STACK_SZ: Addr = 512; // Addr for address arithmetic easiness
     pub type Addr = u32;

@@ -69,9 +69,9 @@ pub struct _ReadReq {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Command {
     Alloc(_AllocReq),
-    Write(_WriteReq),
-    Read(_ReadReq),
     Dealloc(_DeallocReq),
+    Write((_WriteReq, bool)), // Bool is whether to write checked or not.
+    Read((_ReadReq, bool)),   // Bool is whether to read checked or not.
     Exit,
     Debug,
     Empty, // Init
@@ -90,6 +90,18 @@ peg::parser! {
 
         pub (crate) rule var_init() -> (Identifier, Aggr) // An aggregate of one word is really just one singular word.
             = d:var_declare() _ "=" _ e:expression() _ {(d, vec![e])}
+
+        pub (crate) rule checked_write() -> Command
+            = _ "cwrite" _ a:addr() _ s:scalar() _ {Command::Write((_WriteReq { at: a.into(), scalar: s }, true))}
+
+        pub (crate) rule unchecked_write() -> Command
+            = _ "write" _ a:addr() _ s:scalar() _ {Command::Write((_WriteReq { at: a.into(), scalar: s }, false))}
+
+        pub (crate) rule checked_read() -> Command
+            = _ "cread" _ a:addr() _ {Command::Read((_ReadReq { at: a.into() }, true))}
+
+        pub (crate) rule unchecked_read() -> Command
+            = _ "read" _ a:addr() _ {Command::Read((_ReadReq { at: a.into() }, false))}
 
         rule scalar() -> Scalar
             = _ n:$(['0'..='9']+) _ {?
@@ -132,12 +144,16 @@ peg::parser! {
                 --
                 "-" _ y:@ {-y}
                 --
-                "(" _ e:expression() _ ")" { e } // This goes slightly out of scope for our minimalist virtual machine akshually :(
+                "(" _ e:expression() _ ")" { e }
                 l:scalar() { l }
             }
         pub (super) rule cmd() -> Command
             = i:alloc_scalar() ";" {i}
             /i:alloc_aggr() ";" {i}
+            /i:unchecked_write() ";" {i}
+            /i:unchecked_read() ";" {i}
+            /i:checked_write() ";" {i}
+            /i:checked_read() ";" {i}
             /i:dealloc() ";" {i}
             /i:dbg() ";" {i}
             /i:exit() ";" {i}

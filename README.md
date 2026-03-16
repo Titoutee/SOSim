@@ -20,8 +20,6 @@ The main goal of the virtual machine is to **emulate hardware translation mechan
 
 SOSim is intended to be implemented as a simplist virtual machine exposing mem-alloc mechanisms, rather than a micro-kernel, which would add unnecessary performance and implementation overhead.
 
-The `tabled` crate is used for pretty-printing the status of memory at any time.
-
 ---
 
 ### What does SOSim simulate?

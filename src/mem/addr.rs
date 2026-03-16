@@ -6,8 +6,8 @@ pub const KERNBASE: Addr = 0; // Will probably change later on... For now kernel
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub enum Address {
-    Virtual(Addr, usize),
-    Physical(Addr, usize),
+    Virtual(Addr, usize), // The usize is a pointer to the actual memory location in the simulator's memory space, which is used for reading/writing the contents of the address. This is necessary because in a real system, the virtual and physical addresses are just numbers, but in our simulator, we need to keep track of where in our simulated memory these addresses point to.
+    Physical(Addr, usize), // The usize is a pointer to the actual memory location in the simulator's memory space, which is used for reading/writing the contents of the address. This is necessary because in a real system, the virtual and physical addresses are just numbers, but in our simulator, we need to keep track of where in our simulated memory these addresses point to.
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -25,7 +25,7 @@ impl Virtual {
         Physical::new(self.0.translate().get_address(), self.0.get_ptr() as usize)
     }
 
-    // Mask the virtual address to extract the page table indices for each level and the offset.
+    // Mask the virtual address to extract the page table indices for each level and the offset
     pub fn mask(&self, lvl: u8) -> Vec<Addr> {
         let mut addr = self.0.get();
         let lmask = MEM_CTXT.lvl_mask;
@@ -33,18 +33,17 @@ impl Virtual {
         let off_bit_len = MEM_CTXT.v_addr_off_len;
         let lvl_bit_len = MEM_CTXT.v_addr_lvl_len;
 
-        match lvl {
-            0 => vec![addr & off_mask], // For the offset, we just mask the virtual address with the offset mask to get the offset bits.
-            _ => {
-                let mut levels = vec![];
-                addr = addr >> off_bit_len;
-                for _ in 0..MEM_CTXT.pt_levels {
-                    levels.push(addr & lmask);
-                    addr = addr >> lvl_bit_len;
-                }
-                levels
+        let mut indices = Vec::new();
+        if lvl == 0 {
+            indices.push(addr & off_mask); // Extract the offset using the offset mask
+        } else {
+            for _ in 0..lvl {
+                let index = (addr >> off_bit_len) & lmask; // Extract the page table index for the current level using the level mask
+                indices.push(index);
+                addr >>= lvl_bit_len; // Shift the address to the right by the number of bits used for the page table index to prepare for the next level
             }
         }
+        indices
     }
 }
 
@@ -143,9 +142,9 @@ impl Address {
 
 #[cfg(test)]
 
-mod tests {
+mod tests_addr {
 
-    const RAW_ADDR: u32 = 0b11111111000000000011111111110000;
+    const RAW_ADDR: u32 = 0b111111000000000011111111110000;
     use super::{Address, Physical, Virtual};
 
     #[cfg(feature = "bit32")]
@@ -153,14 +152,17 @@ mod tests {
     fn vaddr_from_raw_addr_32b() {
         use super::Address;
 
-        let vaddr = dbg!(Address::Virtual(RAW_ADDR, 0));
+        let virt = dbg!(Virtual(Address::Virtual(RAW_ADDR, 0)));
         let offset = 0b111111110000;
         let lvl1 = 0b000000011;
         let lvl2 = 0b111111000;
-        let lvl3 = 0b000001111;
-        let lvl4 = 0b111100000;
-        let v = vec![lvl1, lvl2, lvl3, lvl4];
+        // let lvl3 = 0b000001111;
+        // let lvl4 = 0b111100000;
+        let v = vec![lvl1, lvl2];
+        assert_eq!(virt.mask(0)[0], offset);
+        assert_eq!(virt.mask(2), v);
     }
+
     #[cfg(feature = "bit32")]
     #[test]
     fn vaddr_mask_offset() {
@@ -212,5 +214,12 @@ mod tests {
             }
             _ => panic!("Expected virtual address"),
         }
+    }
+
+    #[test]
+    fn physical_addr_get() {
+        let phys = Physical::new(0x1234, 0);
+        let addr = phys.get().get();
+        assert_eq!(addr, 0x1234);
     }
 }

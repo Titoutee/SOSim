@@ -19,5 +19,7 @@ pub enum FaultType {
     AddrOutOfRange(Addr),
     Unrecoverable,
     InvalidPage,
+    ReadPermissionDenied(Addr),
+    WritePermissionDenied(Addr),
     // ...
 }
