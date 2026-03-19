@@ -1,11 +1,15 @@
-use crate::mem::{Memory, PHYS_TOTAL, Stack, config::MEM_CTXT};
+use crate::mem::{
+    Memory, PHYS_TOTAL, Stack,
+    config::MEM_CTXT,
+    paging::{Flag, FrameAllocator, PageTableEntry},
+};
 use std::fmt;
 
 impl fmt::Display for Stack {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
             f,
-            "┌────────────────────────── Stack ──────────────────────────┐"
+            "├────────────────────────── Stack ──────────────────────────┤"
         )?;
         writeln!(f, "│ Base:           0x{:08x}", self.base)?;
         writeln!(f, "│ Size:           0x{:08x} ({} bytes)", self.sz, self.sz)?;
@@ -28,10 +32,6 @@ impl fmt::Display for Stack {
             0.0
         };
         writeln!(f, "│ Usage:    {:.1}%", usage_percent)?;
-        writeln!(
-            f,
-            "└───────────────────────────────────────────────────────────┘"
-        )?;
         Ok(())
     }
 }
@@ -53,7 +53,7 @@ impl fmt::Display for Memory {
         writeln!(f)?;
         writeln!(
             f,
-            "┌────────────── Memory (Memory Management Unit) ───────────────┐"
+            "┌───────────── Memory (Memory Management Unit) ─────────────┐"
         )?;
 
         let free_bytes = self.free_bytes();
@@ -109,11 +109,57 @@ impl fmt::Display for Memory {
                 writeln!(f, "│   ├─ 0x{:08x}: {} bytes", addr, size)?;
             }
         }
-
+        writeln!(f, "│ Page Size:       {} bytes", MEM_CTXT.page_size)?;
         writeln!(
             f,
-            "└───────────────────────────────────────────────────────────┘"
+            "│ Virtual Address: {} bits",
+            MEM_CTXT.v_addr_lvl_len + MEM_CTXT.v_addr_off_len,
         )?;
+        writeln!(f, "{}", self._ram.stack)?;
+        writeln!(f, "{}", self.alloc)?;
         Ok(())
+    }
+}
+
+impl fmt::Display for FrameAllocator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f)?;
+        writeln!(f, "├───────────── Frame Allocator ─────────────┤")?;
+        writeln!(f, "│ Total Frames:   {}", self.total_frames())?;
+        writeln!(f, "│ Free Frames:    {}", self.free_frames())?;
+        writeln!(f, "│ Used Frames:    {}", self.used_frames())?;
+        writeln!(f, "├───────────────────────────────────────────┤")?;
+        //writeln!(f, "│ Free Frame List: {:?}", self.free_list)?;
+        //writeln!(f, "│ Used Frame List: {:?}", self.used_list)?;
+        writeln!(f, "└───────────────────────────────────────────┘")?;
+        Ok(())
+    }
+}
+
+impl fmt::Debug for PageTableEntry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PageTableEntry")
+            .field("raw", &format!("0x{:08x}", self.0))
+            .field("present", &self.get_flag(Flag::Present))
+            .field("writable", &self.get_flag(Flag::Writable))
+            .field("readable", &self.get_flag(Flag::Read))
+            .field("ppn", &format!("0x{:05x}", self.get_ppn()))
+            .finish()
+    }
+}
+
+impl fmt::Display for PageTableEntry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "PTE(0x{:08x}) [", self.0)?;
+        if self.get_flag(Flag::Present) {
+            write!(f, "P")?;
+        }
+        if self.get_flag(Flag::Writable) {
+            write!(f, "W")?;
+        }
+        if self.get_flag(Flag::Read) {
+            write!(f, "R")?;
+        }
+        write!(f, "] -> 0x{:05x}", self.get_ppn())
     }
 }

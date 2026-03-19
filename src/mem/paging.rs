@@ -1,16 +1,13 @@
 // PTE format does not exactly match the x86_64 standard, as only present, write, read bits and the address payload is are serialized
 // into the 64b bitset.
 
-use anyhow::Context;
-
 use super::addr::Addr;
 pub use crate::ext::{_From, _Into};
-use crate::mem::PHYS_TOTAL;
+use crate::fault::Fault;
 use crate::mem::addr::Physical;
 use crate::mem::config::MEM_CTXT;
-use std::fmt;
-use std::sync::Mutex;
-
+use crate::mem::{MemResult, PHYS_TOTAL};
+use std::collections::HashMap;
 #[derive(Copy, Clone)]
 pub enum Flag {
     Present,
@@ -19,7 +16,7 @@ pub enum Flag {
 }
 
 #[derive(Clone, Copy)]
-pub struct PageTableEntry(u32);
+pub struct PageTableEntry(pub u32);
 
 impl PageTableEntry {
     pub(crate) fn new(addr: u32) -> Self {
@@ -57,38 +54,11 @@ impl PageTableEntry {
     }
 }
 
-impl fmt::Display for PageTableEntry {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "PTE(0x{:08x}) [", self.0)?;
-        if self.get_flag(Flag::Present) {
-            write!(f, "P")?;
-        }
-        if self.get_flag(Flag::Writable) {
-            write!(f, "W")?;
-        }
-        if self.get_flag(Flag::Read) {
-            write!(f, "R")?;
-        }
-        write!(f, "] -> 0x{:05x}", self.get_ppn())
-    }
-}
-
-impl fmt::Debug for PageTableEntry {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("PageTableEntry")
-            .field("raw", &format!("0x{:08x}", self.0))
-            .field("present", &self.get_flag(Flag::Present))
-            .field("writable", &self.get_flag(Flag::Writable))
-            .field("readable", &self.get_flag(Flag::Read))
-            .field("ppn", &format!("0x{:05x}", self.get_ppn()))
-            .finish()
-    }
-}
-
 /// A page containing its own vpn->ppn translation
 #[derive(Copy, Clone, Debug)]
 pub struct Page {
     pub data: [u8; MEM_CTXT.page_size as usize],
+    pub base: Addr, // Base address of the page in physical memory
     pub ref_count: usize,
     pub ppn: u32,            // physical page number
     pub proc_id: Option<u8>, // None = unallocated
@@ -102,17 +72,20 @@ pub static ZERO_PAGE: Page = Page {
     data: [0; MEM_CTXT.page_size as usize],
     ppn: ZERO_PAGE_PPN,
     ref_count: 0,
+    base: ZERO_PAGE_PPN * (MEM_CTXT.page_size as u32), // Base address of the zero page in physical memory
     proc_id: None, // No one owns ZERO_PAGE, and it is read-only, so it can be safely shared across processes without any risk of data corruption.
     pte: PageTableEntry(0),
 };
 
-// The Page struct represents a physical page in memory, containing the actual data of the page, a reference count to track how many processes are using it, the physical page number (ppn) which identifies its location in physical memory, an optional process ID (proc_id) to indicate which process owns the page (if any), and a PageTableEntry (pte) that stores permission flags for the page. The Page struct provides methods for creating new pages, managing reference counts, checking if an address is within the page, and reading/writing data to/from the page.
+// Page struct represents a physical page in memory, containing the actual data of the page, a reference count to track how many processes are using it, the physical page number (ppn) which identifies its location in physical memory, an optional process ID (proc_id) to indicate which process owns the page (if any), and a PageTableEntry (pte) that stores permission flags for the page. The Page struct provides methods for creating new pages, managing reference counts, checking if an address is within the page, and reading/writing data to/from the page.
 impl Page {
+    // At starting point, each page's base address is calculated from the ppn, and are ordered relatively to their ppn
     pub(crate) fn new(ppn: u32) -> Self {
         Self {
             data: [0; MEM_CTXT.page_size as usize],
             ref_count: 0,
             ppn,
+            base: ppn * (MEM_CTXT.page_size as u32), // Calculate the base address of the page in physical memory based on its physical page number (ppn) and the page size defined in the memory context (MEM_CTXT).
             proc_id: None,
             pte: PageTableEntry(0), // Initially no flags set
         }
@@ -130,8 +103,9 @@ impl Page {
         self.ppn
     }
 
+    // Check if a given address falls within the page's address range, which is determined by its physical page number (ppn) and the page size defined in the memory context (MEM_CTXT). The method calculates the starting address of the page using its ppn and checks if the provided address is greater than or equal to this starting address and less than the starting address plus the page size. This is useful for determining if a particular memory access is valid for this page.
     pub fn ppn_as_addr(&self) -> Addr {
-        self.ppn * (MEM_CTXT.page_size as u32)
+        self.ppn * (MEM_CTXT.page_size as u32) // Convert the physical page number to a physical address by multiplying it by the page size.
     }
 
     pub fn is_in(&self, addr: Addr) -> bool {
@@ -147,12 +121,30 @@ impl Page {
         self.pte = pte;
     }
 
+    pub fn present(&self) -> bool {
+        self.get_pte().get_flag(Flag::Present)
+    }
+
+    pub fn readable(&self) -> bool {
+        self.get_pte().get_flag(Flag::Read)
+    }
+
+    pub fn writable(&self) -> bool {
+        self.get_pte().get_flag(Flag::Writable)
+    }
+
     // Writes a data blob to the page at the specified address. The size of the data blob is determined by the type parameter T, which can be any type that implements the Sized trait. The method calculates the offset within the page based on the provided address and writes the data blob to the page's data array starting from that offset. If the data blob is larger than the remaining space in the page, it will only write as much as fits within the page.
     pub fn write<T>(
         &mut self,
         addr: Addr,
         data: &[u8], /* The data blob to be written at addr */
-    ) {
+    ) -> MemResult<()> {
+        if !self.writable() {
+            return Err(Fault::_from(
+                crate::fault::FaultType::WritePermissionDenied(addr),
+            ));
+        }
+
         let page_addr = self.ppn_as_addr();
 
         let size = std::mem::size_of::<T>(); // The size of the data blob to be written, determined by the type parameter T. This allows the method to know how many bytes to write based on the type of data being written.
@@ -165,14 +157,21 @@ impl Page {
                 i += 1;
             }
         }
+        Ok(())
     }
 
-    pub fn read<T>(&self, addr: Addr) -> Vec<u8> {
+    pub fn read<T>(&self, addr: Addr) -> MemResult<Vec<u8>> {
+        if !self.readable() {
+            return Err(Fault::_from(crate::fault::FaultType::ReadPermissionDenied(
+                addr,
+            )));
+        }
+
         let page_addr = self.ppn_as_addr();
         let size = std::mem::size_of::<T>();
         let s = (addr - page_addr) as usize;
         let e = s + size;
-        self.data[s..e].to_vec()
+        Ok(self.data[s..e].to_vec())
     }
 
     /// Zeroes a page.
@@ -185,32 +184,51 @@ impl Page {
     }
 }
 
+// Partial
+impl PartialEq for Page {
+    fn eq(&self, other: &Self) -> bool {
+        self.ppn == other.ppn
+    }
+}
+
+impl PartialOrd for Page {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.ppn.partial_cmp(&other.ppn)
+    }
+}
+
+// Non partial
+impl Eq for Page {}
+
+impl Ord for Page {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.ppn.cmp(&other.ppn)
+    }
+}
+
 #[derive(Debug)]
 pub struct FrameAllocator {
-    pub pages_out: usize,     // Pages that are still available for allocation
-    pub pages_in: usize,      // Trivially, (total_pages - pages_out)
-    pub free_list: Vec<Page>, // Physical frames; each frame is taken whenever a process allocates it for itself
-    pub used_list: Vec<Page>, // Pages that have been allocated to processes; used for tracking and deallocation
+    pub free_list: HashMap<u32, Page>, // Physical frames; each frame is taken whenever a process allocates it for itself
+    pub used_list: HashMap<u32, Page>, // Pages that have been allocated to processes; used for tracking and deallocation
 }
 
 // The FrameAllocator struct manages the allocation and deallocation of physical memory pages. It maintains a free list of available pages and a used list of allocated pages, along with counters for tracking the number of pages in each state. The free_list is a vector of Page structs that represent physical frames of memory that are available for allocation, while the used_list is a vector of Page structs that have been allocated to processes. The FrameAllocator provides methods for initializing the free list with a range of physical addresses, allocating pages to processes, and freeing pages back to the free list when they are no longer needed.
 // Mutex is used to ensure thread safety when multiple threads may be accessing or modifying the free_list and used_list concurrently, preventing race conditions and ensuring that the internal state of the FrameAllocator remains consistent.
 impl FrameAllocator {
-    const fn empty() -> Self {
+    fn empty() -> Self {
         FrameAllocator {
-            free_list: Vec::new(),
-            used_list: Vec::new(),
-            pages_out: 0,
-            pages_in: 0,
+            free_list: HashMap::with_capacity(MEM_CTXT.page_count as usize),
+            used_list: HashMap::with_capacity(MEM_CTXT.page_count as usize),
         }
     }
 
     pub fn new() -> Self {
         let mut a = Self::empty();
-        a.init_range(Physical::new(0, 0), Physical::new(PHYS_TOTAL as u32, 0)); //
+        a.init_range(Physical::new(0, 0), Physical::new(PHYS_TOTAL as u32, 0));
         a
     }
 
+    // Core method to initialize the free list with a range of physical addresses. It takes a starting physical address and an ending physical address, and populates the free_list with Page structs representing each page in that range. The method calculates the number of pages that can fit within the specified range based on the page size defined in the memory context (MEM_CTXT) and creates a Page struct for each page, setting its physical page number (ppn) accordingly. This allows the FrameAllocator to manage the available physical memory and allocate pages to processes as needed.
     fn init_range(&mut self, start: Physical, end: Physical) {
         let start = start.get();
         let end = end.get().get_address() as usize;
@@ -218,41 +236,41 @@ impl FrameAllocator {
         free.clear();
         let mut addr = start.get_address() as usize;
         while addr + MEM_CTXT.page_size <= end {
-            free.push(Page::new(addr as u32 / (MEM_CTXT.page_size as u32)));
+            let ppn = (addr as u32) / (MEM_CTXT.page_size as u32);
+            free.insert(ppn, Page::new(ppn));
             addr += MEM_CTXT.page_size;
         }
-        self.pages_out = free.len();
+        // println!("{:?}", free);
     }
 
-    pub fn get_index_free(&self, ppn: u32) -> Option<usize> {
-        for (i, v) in self.free_list.iter().enumerate() {
-            if v.ppn() == ppn {
-                return Some(i);
-            }
-        }
-        None
+    // Get the index of the page with the given ppn in the free list, if it exists. This is used for allocation, to find a free page in the free list and move it to the used list.
+    pub fn get_free_mut(&mut self, ppn: u32) -> Option<&mut Page> {
+        self.free_list.get_mut(&ppn)
     }
 
     // Get the index of the page with the given ppn in the used list, if it exists. This is used for deallocation, to find the page in the used list and move it back to the free list.
-    pub fn get_index_used(&self, ppn: u32) -> Option<usize> {
-        for (i, v) in self.used_list.iter().enumerate() {
-            if v.ppn() == ppn {
-                return Some(i);
-            }
-        }
-        None
+    pub fn get_used_mut(&mut self, ppn: u32) -> Option<&mut Page> {
+        self.used_list.get_mut(&ppn)
     }
 
     pub fn push_free(&mut self, page: Page) {
-        self.free_list.push(page);
-        self.pages_out += 1;
-        self.pages_in -= 1;
+        self.free_list.insert(page.ppn, page);
     }
 
     pub fn push_used(&mut self, page: Page) {
-        self.used_list.push(page);
-        self.pages_in += 1;
-        self.pages_out -= 1;
+        self.used_list.insert(page.ppn, page);
+    }
+
+    pub fn free_frames(&self) -> usize {
+        self.free_list.len()
+    }
+
+    pub fn used_frames(&self) -> usize {
+        self.used_list.len()
+    }
+
+    pub fn total_frames(&self) -> usize {
+        self.free_frames() + self.used_frames()
     }
 }
 
@@ -324,11 +342,48 @@ mod tests_paging {
     }
 
     #[test]
-    fn test_page_write_and_read() {
+    #[should_panic]
+    fn test_page_write_and_read_fail_null_page() {
         let mut page = Page::new(0);
         let data = [1, 2, 3, 4];
-        page.write::<[u8; 4]>(0, &data);
-        let read_data = page.read::<[u8; 4]>(0);
+        page.write::<[u8; 4]>(0, &data).unwrap();
+        // Dead zone
+        let read_data = page.read::<[u8; 4]>(0).unwrap();
         assert_eq!(data.to_vec(), read_data);
+    }
+
+    #[test]
+    fn test_page_write_and_read() {
+        let mut page = Page::new(1);
+        page.pte.set_flag(Flag::Writable);
+        page.pte.set_flag(Flag::Read);
+        let data = [1, 2, 3, 4];
+        page.write::<[u8; 4]>(4096, &data).unwrap();
+        let read_data = page.read::<[u8; 4]>(4096).unwrap();
+        assert_eq!(data.to_vec(), read_data);
+    }
+
+    #[test]
+    fn test_init_frame_allocator() {
+        let allocator = FrameAllocator::new();
+        assert_eq!(
+            allocator.free_frames(),
+            PHYS_TOTAL as usize / MEM_CTXT.page_size as usize
+        );
+        assert_eq!(allocator.used_frames(), 0);
+        assert_eq!(allocator.free_list.get(&0), Some(&Page::new(0)));
+        assert_eq!(allocator.used_list.get(&0), None);
+    }
+
+    #[test]
+    fn test_frame_allocator_push_free_and_used() {
+        let mut allocator = FrameAllocator::new();
+        let page = Page::new(0);
+        allocator.push_used(page);
+        assert_eq!(allocator.used_frames(), 1);
+        assert_eq!(allocator.used_list.get(&0), Some(&Page::new(0)));
+        allocator.push_free(page);
+        assert_eq!(allocator.free_frames(), 512); // Assuming 512 pages total
+        assert_eq!(allocator.free_list.get(&0), Some(&Page::new(0)));
     }
 }

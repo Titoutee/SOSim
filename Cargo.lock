@@ -672,6 +672,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "min-heap"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bfeb65de35b2c063e070dc016cc664ab3770f64c252f451079b6ea5b60e6a618"
+
+[[package]]
 name = "miniz_oxide"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1468,6 +1474,7 @@ dependencies = [
  "bytes",
  "clap",
  "lazy_static",
+ "min-heap",
  "num",
  "num_cpus",
  "peg",

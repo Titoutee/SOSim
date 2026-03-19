@@ -2,6 +2,7 @@
 
 use crate::mem::addr::Addr;
 
+#[derive(Debug)]
 pub struct Fault {
     _type: FaultType,
 }
@@ -12,6 +13,7 @@ impl Fault {
     }
 }
 
+#[derive(Debug)]
 pub enum FaultType {
     BufferOverflow(Addr),
     StackOverflow(Addr),
@@ -21,5 +23,6 @@ pub enum FaultType {
     InvalidPage,
     ReadPermissionDenied(Addr),
     WritePermissionDenied(Addr),
+    UnknownVar(Addr),
     // ...
 }

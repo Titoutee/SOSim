@@ -2,9 +2,8 @@
 // be given in the future to this piece of functionality.
 // Alternatively, it can pinpoint unecessary implemenatation bits or method/function/procedure calls (mostly cloning, ...).
 
-use process::Process;
-
 use crate::mem::Memory;
+use process::Process;
 
 pub mod ext;
 pub mod fault;

@@ -12,12 +12,14 @@ use crate::{
         paging::{Flag, FrameAllocator, Page},
     },
 };
+
 pub const PAGE_NUMBER: u32 = MEM_CTXT.page_count;
 pub const PHYS_TOTAL: usize = (MEM_CTXT.page_count * MEM_CTXT.page_size as u32) as usize;
 
+use anyhow::Context;
 use config::bitmode::Addr;
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use crate::lang::Byte;
@@ -125,26 +127,6 @@ impl Ram {
             stack,
         }
     }
-
-    /// The page base address which contains the desired address
-    pub fn get_page_of_base_addr(&mut self, base: Addr) -> Option<&mut Page> {
-        for p in self._in.iter_mut() {
-            if let Some(p) = p {
-                if p.ppn_as_addr() == base {
-                    return Some(p);
-                }
-            }
-        }
-        None
-    }
-
-    pub fn get_ppn_of_base_addr(&mut self, base: Addr) -> Option<u32> {
-        Some(self.get_page_of_base_addr(base)?.ppn())
-    }
-
-    pub fn get_ppn_of_addr(&mut self, addr: Addr) -> Option<u32> {
-        self.get_ppn_of_base_addr(addr / (MEM_CTXT.page_size as u32))
-    }
 }
 
 impl fmt::Display for Ram {
@@ -163,10 +145,6 @@ pub struct Memory {
 
 impl Memory {
     pub fn new() -> Self {
-        let mut free_list = vec![];
-        for ppn in 1..MEM_CTXT.page_count {
-            free_list.push(Page::new(ppn))
-        }
         Memory {
             _ram: Ram::new(MEM_CTXT.page_count as usize, Stack::default()),
             alloc: FrameAllocator::new(),
@@ -179,52 +157,115 @@ impl Memory {
         &mut self.alloc
     }
 
-    /// Get the set of physical page numbers that cover the address range [addr, addr + size]
-    pub fn get_ppns_for_range(&self, addr: Addr, size: usize) -> Vec<u32> {
-        let page_size = MEM_CTXT.page_size as u32;
-        let start_ppn = addr / page_size;
-        let end_addr = addr + size as u32;
-        let end_ppn = (end_addr + page_size - 1) / page_size;
-        (start_ppn..end_ppn).collect()
+    pub fn get_ppns_for_range(&self, addr: Addr, n: usize) -> Vec<u32> {
+        // Using get_ppn_of_base_addr to get all the ppns
+        let mut ppns = HashSet::new();
+        for offset in 0..n as u32 {
+            if let Some(ppn) = self.get_ppn_of_addr(addr + offset) {
+                ppns.insert(ppn);
+            }
+        }
+        ppns.into_iter().collect()
+    }
+
+    /// Get the ppn of the page containing the given address, if it exists (i.e., if the address is in a page that is either allocated or free)
+    /// This takes into account the used and free list, since the page containing the address can be either allocated or free; if it's allocated, it will be in the used list, and if it's free, it will be in the free list
+    pub fn get_ppn_of_addr(&self, addr: Addr) -> Option<u32> {
+        // Using the used list to find the ppn of the page containing the address, since the free list only contains free pages and thus cannot be used to find the ppn of an allocated page
+        for page in self
+            .alloc
+            .used_list
+            .iter()
+            .chain(self.alloc.free_list.iter())
+        {
+            let page_start_addr = page.0 * (MEM_CTXT.page_size as u32);
+            let page_end_addr = page_start_addr + (MEM_CTXT.page_size as u32);
+            if (page_start_addr..page_end_addr).contains(&addr) {
+                return Some(*page.0);
+            }
+        }
+        None
+    }
+
+    /// A variant of `get_ppn_of_addr` that only looks at the used list, to find the ppn of the page containing the address if it is allocated, and return None if it's not allocated (i.e., if it's in the free list or out of range)
+    pub fn get_ppn_of_addr_page_used_only(&self, addr: Addr) -> Option<u32> {
+        // Using the used list to find the ppn of the page containing the address, since the free list only contains free pages and thus cannot be used to find the ppn of an allocated page
+        for page in self.alloc.used_list.iter() {
+            let page_start_addr = page.0 * (MEM_CTXT.page_size as u32);
+            let page_end_addr = page_start_addr + (MEM_CTXT.page_size as u32);
+            if (page_start_addr..page_end_addr).contains(&addr) {
+                return Some(*page.0);
+            }
+        }
+        None
     }
 
     /// Move a single page from free list to used list for the given address
-    fn mark_page_as_used(&mut self, addr: Addr) -> Option<()> {
-        let ppn = self.ram_mut().get_ppn_of_addr(addr)?;
-        let index = self.alloc.get_index_free(ppn)?; // Find the page in the free list by its ppn
-        let page = self.alloc_mut().free_list.remove(index); // Remove the page from the free list
-        self.alloc_mut().push_used(page); // Add the page to the used list
-        Some(())
+    fn mark_page_as_used(&mut self, addr: Addr) -> anyhow::Result<()> {
+        // Get the relevant ppn for the given address
+        let ppn = self
+            .get_ppn_of_addr(addr)
+            .context("get ppn of base addr in mark page as used")?;
+
+        // Retrieve the page that this ppn labels
+        let page = self
+            .alloc_mut()
+            .free_list
+            .remove(&ppn)
+            .context("Remove the ppn and page from the free list")?; // Remove the page from the free list
+
+        // Push the page to the used list = page is allocated!!
+        self.alloc_mut().push_used(page);
+        anyhow::Ok(())
     }
 
-    /// Move pages from free_list to used_list for the given address range [addr, addr + size]
-    fn mark_pages_as_used(&mut self, addr: Addr, n: usize) -> Option<()> {
+    /// Move multiple pages from free_list to used_list for the given address range [addr, addr + size]
+    fn mark_pages_as_used(&mut self, addr: Addr, n: usize) -> anyhow::Result<()> {
         let ppns = self.get_ppns_for_range(addr, n);
         for ppn in ppns {
-            self.mark_page_as_used(ppn * (MEM_CTXT.page_size as u32))?;
+            self.mark_page_as_used(ppn * (MEM_CTXT.page_size as u32))
+                .context("mark page as used in mark pages as used")?;
         }
-        Some(())
+        anyhow::Ok(())
     }
 
-    /// Move pages from used_list back to free_list for the given address
-    fn mark_page_as_free(&mut self, addr: Addr) -> Option<()> {
-        let ppn = self.ram_mut().get_ppn_of_addr(addr)?; // Get the ppn of the page containing the address, to find it in the used list and move it back to the free list
-        let index = self.alloc.get_index_used(ppn)?; // Find the page in the used list by its ppn   
-        let page = self.alloc_mut().used_list.remove(index); // Remove the page from the used list
-        self.alloc_mut().push_free(page); // Add the page back to the free list
-        Some(())
+    /// Move a single page from used_list back to free_list for the given address
+    fn mark_page_as_free(&mut self, addr: Addr) -> anyhow::Result<()> {
+        // Get the relevant ppn for the given address
+        let ppn = self
+            .get_ppn_of_addr(addr)
+            .context("get ppn of addr in mark page as free")?; // Get the ppn of the page containing the address, to find it in the used list and move it back to the free list
+
+        // Retrieve the page that this ppn labels
+        let page = self
+            .alloc_mut()
+            .used_list
+            .remove(&ppn)
+            .context("Remove the ppn from the used list")?; // Remove the page from the used list
+
+        // Add the page back to the free list
+        self.alloc_mut().push_free(page);
+        anyhow::Ok(())
     }
 
-    fn mark_pages_as_free(&mut self, addr: Addr, n: usize) -> Option<()> {
+    /// Move multiple pages used_list to free_list for the given address range [addr, addr + size]
+    fn mark_pages_as_free(&mut self, addr: Addr, n: usize) -> anyhow::Result<()> {
+        // Get relevant ppns for the given address range
         let ppns = self.get_ppns_for_range(addr, n);
         for ppn in ppns {
-            self.mark_page_as_free(ppn * (MEM_CTXT.page_size as u32))?;
+            self.mark_page_as_free(ppn * (MEM_CTXT.page_size as u32))
+                .context("mark page as free in mark pages as free")?;
         }
-        Some(())
+        anyhow::Ok(())
     }
 
+    // Free bytes = free pages, without accounting for inner free bytes
     pub fn free_bytes(&self) -> usize {
         self.alloc.free_list.len() * MEM_CTXT.page_size
+    }
+
+    pub fn free_bytes_fine(&self) -> usize {
+        todo!()
     }
 
     pub fn ram(&self) -> &Ram {
@@ -244,43 +285,35 @@ impl Memory {
         }
     }
 
-    /// Get the page of word at `addr`
-    pub fn get_page_of(&mut self, addr: Addr) -> Option<&mut Page> {
-        self.ram_mut().get_page_of_base_addr(addr)
+    /// Get the page of word at `addr` in free pages list
+    pub fn get_page_of(&self, addr: Addr) -> Option<&Page> {
+        self.alloc.used_list.get(&addr)
     }
 
-    // All access operations are physical-level //
-    // and thus should be invoked after translation process //
-    // i.e.: `addr` is a physical address //
+    pub fn get_page_of_mut(&mut self, addr: Addr) -> Option<&mut Page> {
+        self.alloc.used_list.get_mut(&addr)
+    }
 
+    // Read
     fn read_at<T>(&self, addr: Addr) -> MemResult<Vec<Byte>> {
-        let page = self
-            .ram()
-            ._in
-            .get((addr / (MEM_CTXT.page_size as u32)) as usize)
-            .ok_or(Fault::_from(FaultType::AddrOutOfRange(addr)))?
-            .ok_or(Fault::_from(FaultType::InvalidPage))?;
-
-        Ok(page.read::<T>(addr))
+        self.get_page_of(addr)
+            .ok_or(Fault::_from(FaultType::InvalidPage))?
+            .read::<T>(addr)
     }
 
     /// Reads word at `addr`, checking if this word is allocated yet.
-    pub fn _read_at_checked<T>(&self, addr: Addr) -> Option<MemResult<Vec<u8>>> {
-        self.alloc_var.get(&addr)?;
-        Some(self.read_at::<T>(addr))
+    pub fn _read_at_checked<T>(&self, addr: Addr) -> MemResult<Vec<u8>> {
+        self.alloc_var
+            .get(&addr)
+            .ok_or(Fault::_from(FaultType::UnknownVar(addr)))?;
+        self.read_at::<T>(addr)
     }
 
     /// Writes bytes at `addr`
     /// Mostly used in a non-allocation-guarded context.
-    fn _write_at_addr<T>(&mut self, addr: Addr, bytes: &[u8]) -> EmptyO {
+    fn _write_at_addr<T>(&mut self, addr: Addr, bytes: &[u8]) -> Option<()> {
         // e.g.: Write no-alloc
-        let page = self
-            .ram_mut()
-            ._in
-            .get_mut((addr / (MEM_CTXT.page_size as u32)) as usize)
-            .ok_or(Fault::_from(FaultType::AddrOutOfRange(addr)))
-            .ok()?
-            .as_mut()?;
+        let page = self.get_page_of_mut(addr)?;
 
         page.write::<T>(addr, bytes);
         Some(())
@@ -288,7 +321,7 @@ impl Memory {
 
     /// Writes a singular byte at `addr`, checking if this word is allocated yet.
     /// To be used in an allocation-guarded context.
-    pub fn _write_at_addr_checked<T>(&mut self, addr: Addr, bytes: &[Byte]) -> EmptyO {
+    pub fn _write_at_addr_checked<T>(&mut self, addr: Addr, bytes: &[Byte]) -> Option<()> {
         self.alloc_var.get(&addr)?;
         self._write_at_addr::<T>(addr, bytes);
         Some(())
@@ -296,11 +329,16 @@ impl Memory {
 
     /// Allocates (without writing) `n` consecutive bytes starting at address `addr`.
     /// /!\ Low-level alloc != translation process
-    pub fn _alloc(&mut self, addr: Addr, n: usize) {
+    pub fn _alloc(&mut self, addr: Addr, n: usize) -> anyhow::Result<()> {
         self.alloc_var.insert(addr, n);
-        self.mark_pages_as_used(addr, n);
-        // Set read and write permissions on allocated pages
-        self._set_page_permissions(addr, n, true, true);
+        // If page is not allocated yet, mark it as allocated; if it's already allocated, it means it's already marked as allocated and we just need to set the permissions on it (e.g., in the case of an allocation that overlaps with an existing one, which is allowed in the non-checked version of alloc)
+        if self.get_page_of(addr).is_none() {
+            self.mark_pages_as_used(addr, n)
+                .context("mark page as used in _alloc")?;
+            // Set read and write permissions on allocated pages
+            self._set_page_permissions(addr, n, true, true);
+        }
+        Ok(())
     }
 
     /// Sets read/write permissions on pages in the given address range
@@ -330,17 +368,17 @@ impl Memory {
     }
 
     // Checks for no conflict with stack and other already present allocations
-    pub fn _alloc_checked(&mut self, addr: Addr, n: usize, shrink: bool) -> EmptyO {
+    pub fn _alloc_checked(&mut self, addr: Addr, n: usize, shrink: bool) -> anyhow::Result<()> {
         // TODO: `shrink` option to try to fit in the available space if there is a conflict, instead of just returning None
         // If `shrink` is true, it will try to shrink the allocation size to fit in the available space if there is a conflict, instead of just returning None
         if self.alloc_var.get(&addr).is_some() {
-            None // Don't allocate if there is already an allocation at that address, to prevent conflict with other processes' allocations
+            anyhow::bail!("Address already allocated"); // Don't allocate if there is already an allocation at that address, to prevent conflict with other processes' allocations
         } else if let Segment::Stack = self.get_segment_type_of(addr) {
-            None // Don't allocate if the address is in the stack segment, to prevent conflict with stack operations (push/pop)
+            anyhow::bail!("Address in stack segment"); // Don't allocate if the address is in the stack segment, to prevent conflict with stack operations (push/pop)
         } else if self.get_page_of(addr).is_none() {
-            None // Don't allocate if the address is out of physical memory range, to prevent invalid memory access; out of range is also considered as not allocated, to prevent conflict with other processes' allocations
+            anyhow::bail!("Address out of physical memory range"); // Don't allocate if the address is out of physical memory range, to prevent invalid memory access; out of range is also considered as not allocated, to prevent conflict with other processes' allocations
         } else if self.get_page_of(addr).unwrap().ppn() == MEM_CTXT.zero_page_ppn {
-            None // Don't allocate if the address is in the zero page, to prevent invalid memory access
+            anyhow::bail!("Address in zero page"); // Don't allocate if the address is in the zero page, to prevent invalid memory access
         } else if {
             let new_range = addr..addr + (n) as u32;
             self.alloc_var.iter().any(|(&a, &size)| {
@@ -348,52 +386,58 @@ impl Memory {
                 !(new_range.end <= real_range.start || new_range.start >= real_range.end)
             })
         } {
-            None // Don't allocate if there is an overlap with another allocation, to prevent conflict with other processes' allocations
+            anyhow::bail!("Address conflicts with existing allocation"); // Don't allocate if there is an overlap with another allocation, to prevent conflict with other processes' allocations
         } else {
-            self._alloc(addr, n); // Allocate if there is no conflict
-            Some(())
+            self._alloc(addr, n).context("raw alloc in alloc checked")?; // Allocate if there is no conflict
+            Ok(())
         }
     }
 
     /// Deallocates without checking if there is any conflict with the stack or other processes' allocations
     /// (one process can deallocate the resources of another through this method)
-    pub fn _dealloc(&mut self, addr: Addr) -> EmptyO {
+    pub fn _dealloc(&mut self, addr: Addr) -> anyhow::Result<()> {
         if let Some(n) = self.alloc_var.remove(&addr) {
             // Clear permissions before freeing the pages
             self._set_page_permissions(addr, n, false, false);
-            self.mark_pages_as_free(addr, n);
-            Some(())
+            self.mark_pages_as_free(addr, n)
+                .context("mark pages as free")?;
+            Ok(())
         } else {
-            None
+            Err(anyhow::anyhow!("Address not found"))
         }
     }
 
     // Deallocates only if there is no conflict with the stack or other processes' allocations (i.e., only if the allocation to be deallocated belongs to the process itself, which is the common case)
-    pub fn _dealloc_check_no_other(&mut self, addr: Addr, id: u8 /* Self id */) -> EmptyO {
-        let at_page = self.get_page_of(addr)?;
+    pub fn _dealloc_check_no_other(
+        &mut self,
+        addr: Addr,
+        id: u8, /* Self id */
+    ) -> anyhow::Result<()> {
+        let at_page = self.get_page_of(addr).context("get page")?;
         match at_page.proc_id {
             Some(proc_id) => {
                 if id == proc_id {
                     self._dealloc(addr)
                 } else {
-                    None
+                    Err(anyhow::anyhow!("Allocation does not belong to the process"))
                 }
             }
-            None => None,
+            None => Err(anyhow::anyhow!("Address not found")),
         }
     }
 
     /// Deallocates only if it's out of the stack (which requires the user to call through pop)
-    pub fn _dealloc_check_no_stack(&mut self, addr: Addr) -> EmptyO {
+    pub fn _dealloc_check_no_stack(&mut self, addr: Addr) -> anyhow::Result<()> {
         if let Segment::Neutral = self.get_segment_type_of(addr) {
             if let Some(n) = self.alloc_var.remove(&addr) {
-                self.mark_pages_as_free(addr, n);
-                Some(())
+                self.mark_pages_as_free(addr, n)
+                    .context("mark pages as free")?;
+                Ok(())
             } else {
-                None
+                Err(anyhow::anyhow!("Address not found"))
             }
         } else {
-            None // Warn that nothing could be deallocated
+            Err(anyhow::anyhow!("Address is not in the neutral segment"))
         }
     }
 
@@ -412,22 +456,25 @@ impl Memory {
 
     pub fn _pop_checked(&mut self) -> MemResult<Byte> {
         self.ram_mut().stack._pop_sp()?; // Pop occurs before to prevent reference conflict
-        let r = self.read_at::<Byte>(self.ram().stack.sp)?;
-        Ok(r[0]) // Only one byte is popped, so we return the first byte of the read result
+        Ok(self.read_at::<Byte>(self.ram().stack.sp)?[0]) // Only one byte is popped, so we return the first byte of the read result
     }
 
     // Always pop a singular byte from stack using `_pop` only
     pub fn _pop(&mut self) -> MemResult<Byte> {
         self.ram_mut().stack._pop_sp()?; // Pop occurs before to prevent reference conflict
-        let r = self.read_at::<Byte>(self.ram().stack.sp)?;
-        Ok(r[0])
+        Ok(self.read_at::<Byte>(self.ram().stack.sp)?[0])
     }
 }
 
 #[cfg(test)]
 mod tests_memory {
+    // use num::rational;
+
+    use std::vec;
+
     use super::*;
 
+    #[test]
     fn test_stack_push_sp() {
         let mut stack = Stack {
             base: 0,
@@ -439,6 +486,7 @@ mod tests_memory {
         assert_eq!(stack._sp(), 1);
     }
 
+    #[test]
     fn test_stack_pop_sp() {
         let mut stack = Stack {
             base: 0,
@@ -450,6 +498,7 @@ mod tests_memory {
         assert_eq!(stack._sp(), 9);
     }
 
+    #[test]
     fn test_stack_pop_sp_underflow() {
         let mut stack = Stack {
             base: 0,
@@ -460,6 +509,7 @@ mod tests_memory {
         assert!(stack._pop_sp().is_err());
     }
 
+    #[test]
     fn test_stack_push_sp_checked_overflow() {
         let mut stack = Stack {
             base: 0,
@@ -470,46 +520,53 @@ mod tests_memory {
         assert!(stack._push_sp_checked().is_err());
     }
 
+    #[test]
     fn test_memory_get_segment_stack() {
         let memory = Memory::new();
         let addr = memory.ram().stack.base;
         assert_eq!(memory.get_segment_type_of(addr), Segment::Stack);
     }
 
+    #[test]
     fn test_memory_get_segment_neutral() {
         let memory = Memory::new();
         let addr = memory.ram().stack._end_cap() + 100;
         assert_eq!(memory.get_segment_type_of(addr), Segment::Neutral);
     }
 
+    #[test]
     fn test_mmu_new_init() {
-        let mut mmu = Memory::new();
+        let mmu = Memory::new();
         assert!(!mmu.alloc.free_list.is_empty());
         assert!(mmu.alloc.used_list.is_empty());
     }
 
+    #[test]
     fn test_memory_alloc_and_dealloc() {
         let mut memory = Memory::new();
         memory._alloc(1000, 64);
-        assert!(memory.alloc_var.contains_key(&1000));
-        assert!(memory._dealloc(1000).is_some());
+        assert_eq!(memory.alloc_var.get(&1000), Some(&64));
+        memory._dealloc(1000);
         assert!(!memory.alloc_var.contains_key(&1000));
     }
 
+    #[test]
     fn test_memory_alloc_checked_conflict() {
         let mut memory = Memory::new();
-        memory._alloc(1000, 64);
+        memory._alloc(1000, 64).unwrap();
         memory._alloc_checked(1000, 65, false); // Should not allocate again
         assert_eq!(memory.alloc_var.get(&1000), Some(&64));
     }
 
+    #[test]
     fn test_memory_alloc_checked_conflit_positive() {
         let mut memory = Memory::new();
-        memory._alloc(1000, 64);
-        memory._alloc(1000, 65); // Should allocate again
+        memory._alloc(1000, 64).unwrap();
+        memory._alloc(1000, 65).unwrap(); // Should allocate again
         assert_eq!(memory.alloc_var.get(&1000), Some(&65));
     }
 
+    #[test]
     fn test_memory_alloc_checked_stack_conflict() {
         let mut memory = Memory::new();
         let stack_addr = memory.ram().stack.base + 10;
@@ -517,23 +574,26 @@ mod tests_memory {
         assert!(!memory.alloc_var.contains_key(&stack_addr));
     }
 
+    #[test]
     fn test_memory_alloc_checked_overlap_conflict1() {
         let mut memory = Memory::new();
-        memory._alloc(1000, 64);
+        memory._alloc(1000, 64).unwrap();
         memory._alloc_checked(1020, 64, false); // Should not allocate due to overlap
         assert!(!memory.alloc_var.contains_key(&1020));
     }
 
+    #[test]
     fn test_memory_alloc_checked_overlap_conflict2() {
         let mut memory = Memory::new();
-        memory._alloc(1000, 64);
+        memory._alloc(1000, 64).unwrap();
         memory._alloc_checked(990, 20, false); // Should not allocate due to overlap
         assert!(!memory.alloc_var.contains_key(&990));
     }
 
+    #[test]
     fn test_memory_alloc_checked_overlap_conflict3() {
         let mut memory = Memory::new();
-        memory._alloc(1000, 64);
+        memory._alloc(1000, 64).unwrap();
         memory._alloc_checked(1020, 2, false); // Should not allocate due to overlap
         assert!(!memory.alloc_var.contains_key(&1020));
     }
@@ -542,60 +602,90 @@ mod tests_memory {
     #[should_panic]
     fn test_memory_alloc_and_dealloc_double_free() {
         let mut memory = Memory::new();
-        memory._alloc(1000, 64);
+        memory._alloc(1000, 64).unwrap();
         assert!(memory.alloc_var.contains_key(&1000));
-        assert!(memory._dealloc(1000).is_some());
-        assert!(memory._dealloc(1000).is_some());
+        assert!(memory._dealloc(1000).is_ok());
+        assert!(memory._dealloc(1000).is_ok());
         // assert!(!memory.alloc_var.contains_key(&1000));
     }
-
+    #[test]
     fn test_alloc_checked_with_shrink_no_fit() {
         let mut memory = Memory::new();
-        memory._alloc(1000, 64);
+        memory._alloc(1000, 64).unwrap();
         memory._alloc_checked(1020, 10, true); // Should shrink to 0 bytes and not allocate
         assert!(!memory.alloc_var.contains_key(&1020));
     }
 
-    fn test_pretty_print() {
-        let mut mem = Memory::new();
-        mem._alloc(100000, 64);
-        mem._alloc(101000, 64);
-        println!("{}", mem);
+    #[test]
+    fn test_get_ppns_for_range() {
+        let memory = Memory::new();
+        let addr = 4096; // Start of page 1
+        let size = 1; // 2 pages of 4096 bytes
+        let ppns = memory.get_ppns_for_range(addr, size);
+        assert_eq!(ppns, vec![1]);
     }
 
     #[test]
-    fn run_all_memory_tests() {
-        println!("stack_push_sp");
-        test_stack_push_sp();
-        println!("stack_pop_sp");
-        test_stack_pop_sp();
-        println!("stack_pop_sp_underflow");
-        test_stack_pop_sp_underflow();
-        println!("stack_push_sp_checked_overflow");
-        test_stack_push_sp_checked_overflow();
-        println!("memory_get_segment_stack");
-        test_memory_get_segment_stack();
-        println!("memory_get_segment_neutral");
-        test_memory_get_segment_neutral();
-        println!("mmu_new_init");
-        test_mmu_new_init();
-        println!("memory_alloc_and_dealloc");
-        test_memory_alloc_and_dealloc();
-        println!("memory_alloc_checked_conflict");
-        test_memory_alloc_checked_conflict();
-        println!("memory_alloc_checked_conflit_positive");
-        test_memory_alloc_checked_conflit_positive();
-        println!("memory_alloc_checked_stack_conflict");
-        test_memory_alloc_checked_stack_conflict();
-        println!("memory_alloc_checked_overlap_conflict1");
-        test_memory_alloc_checked_overlap_conflict1();
-        println!("memory_alloc_checked_overlap_conflict2");
-        test_memory_alloc_checked_overlap_conflict2();
-        println!("memory_alloc_checked_overlap_conflict3");
-        test_memory_alloc_checked_overlap_conflict3();
-        println!("alloc_checked_with_shrink_no_fit");
-        test_alloc_checked_with_shrink_no_fit();
-        println!("pretty_print");
-        test_pretty_print();
+    fn test_get_ppn_of_base_addr() {
+        let memory = Memory::new();
+        let addr = 4096; // Start of page 1
+        assert_eq!(memory.get_ppn_of_addr(addr), Some(1));
+    }
+
+    #[test]
+    fn test_get_ppn_of_base_addr_2() {
+        let memory = Memory::new();
+        let addr = 236523; // Start of page 57
+        assert_eq!(memory.get_ppn_of_addr(addr), Some(57));
+    }
+
+    #[test]
+    fn test_get_ppn_of_base_addr_3() {
+        let memory = Memory::new();
+        let addr = 8001; // Start of page 1
+        assert_eq!(memory.get_ppn_of_addr(addr), Some(1));
+    }
+
+    #[test]
+    fn test_mark_page_as_used_and_free() {
+        let mut memory = Memory::new();
+        let addr = 4096; // Start of page 1
+        memory.mark_page_as_used(addr).unwrap();
+        assert!(
+            memory
+                .alloc
+                .free_list
+                .iter()
+                .all(|p| *p.0 != addr / (MEM_CTXT.page_size as u32))
+        );
+        assert!(
+            memory
+                .alloc
+                .used_list
+                .iter()
+                .any(|p| *p.0 == addr / (MEM_CTXT.page_size as u32))
+        );
+        memory.mark_page_as_free(addr).unwrap();
+        assert!(
+            memory
+                .alloc
+                .free_list
+                .iter()
+                .any(|p| *p.0 == addr / (MEM_CTXT.page_size as u32))
+        );
+        assert!(
+            memory
+                .alloc
+                .used_list
+                .iter()
+                .all(|p| *p.0 != addr / (MEM_CTXT.page_size as u32))
+        );
+    }
+    #[test]
+    fn test_pretty_print() {
+        let mut mem = Memory::new();
+        mem._alloc(100000, 64).unwrap();
+        mem._alloc(101000, 64).unwrap();
+        println!("{}", mem);
     }
 }
