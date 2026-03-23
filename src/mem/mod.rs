@@ -206,14 +206,19 @@ impl Memory {
         let ppn = self
             .get_ppn_of_addr(addr)
             .context("get ppn of base addr in mark page as used")?;
+        println!("{}", ppn);
 
         // Retrieve the page that this ppn labels
-        let page = self
-            .alloc_mut()
-            .free_list
-            .remove(&ppn)
-            .context("Remove the ppn and page from the free list")?; // Remove the page from the free list
-
+        let page = self.alloc_mut().free_list.remove(&ppn); // Remove the page from the free list
+        let page = if let None = page {
+            if let None = self.alloc_mut().used_list.get(&ppn) {
+                anyhow::bail!("unknown page access")
+            } else {
+                self.alloc_mut().used_list.get(&ppn).cloned().unwrap()
+            }
+        } else {
+            page.unwrap()
+        };
         // Push the page to the used list = page is allocated!!
         self.alloc_mut().push_used(page);
         anyhow::Ok(())
@@ -559,7 +564,7 @@ mod tests_memory {
     }
 
     #[test]
-    fn test_memory_alloc_checked_conflit_positive() {
+    fn test_memory_alloc_checked_conflict_positive() {
         let mut memory = Memory::new();
         memory._alloc(1000, 64).unwrap();
         memory._alloc(1000, 65).unwrap(); // Should allocate again
@@ -596,6 +601,14 @@ mod tests_memory {
         memory._alloc(1000, 64).unwrap();
         memory._alloc_checked(1020, 2, false); // Should not allocate due to overlap
         assert!(!memory.alloc_var.contains_key(&1020));
+    }
+
+    #[test]
+    fn test_memory_alloc_checked_overlap_conflict4() {
+        let mut memory = Memory::new();
+        memory._alloc(10029, 64).unwrap();
+        memory._alloc_checked(10030, 2, false); // Should not allocate due to overlap
+        assert!(!memory.alloc_var.contains_key(&10030));
     }
 
     #[test]
