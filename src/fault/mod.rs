@@ -24,5 +24,6 @@ pub enum FaultType {
     ReadPermissionDenied(Addr),
     WritePermissionDenied(Addr),
     UnknownVar(Addr),
+    SignallingFault,
     // ...
 }

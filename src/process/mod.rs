@@ -1,7 +1,9 @@
 //! Process behaviour
 
 use crate::lang::Command::{self, *};
+use crate::mem::MemResult;
 use crate::mem::Memory;
+use std::sync::Arc;
 
 // TODO: Replace with the correct module path if PageTable is defined elsewhere
 #[derive(Debug, Default)]
@@ -28,43 +30,41 @@ pub enum Signal {
 }
 
 /// A single `Process` instantiated into main memory. It has its own `PageTable` and process context.
-pub struct Process<'a> {
+pub struct Process {
     pub pid: usize,
-    pub mem: &'a Memory, // Back up reference to main mem
+    pub mem: Arc<Memory>, // Backup reference to main memory
     pub page_table: PageTable,
     pub context: ProcessContext,
 }
 
-impl<'a> Process<'a> {
+impl Process {
     /// A new process can only be created through the machine.
 
     /// Executes an executable command (that is every command but `EXIT`).
-    /// The `EXIT` case is handled externally as part of the
-    pub fn _exec(command: &Command) -> Signal {
+    /// The `EXIT` case is handled externally as part of the toplevel behaviour, as this is a toplevel-only command.
+    pub fn _exec(&mut self, command: &Command) -> MemResult<Signal> {
         match command {
             Debug => {
-                println!("Debug!");
-                Signal::Debug
+                // println!("Debug!");
+                println!("{}", self.mem);
+                Ok(Signal::Debug)
             }
-            Alloc(s) => {
-                println!("Alloc: {:?}", s);
-                Signal::Alloc
-            }
+            Alloc(s) => Ok(Signal::Alloc),
             Dealloc(s) => {
                 println!("Dealloc: {:?}", s);
-                Signal::Dealloc
+                Ok(Signal::Dealloc)
             }
             Write(s) => {
                 println!("Write: {:?}", s);
-                Signal::Write
+                Ok(Signal::Write)
             }
             Read(s) => {
                 println!("Read: {:?}", s);
-                Signal::Read
+                Ok(Signal::Read)
             }
             Exit => {
                 println!("Exit");
-                Signal::Exit
+                Ok(Signal::Exit)
             }
 
             _ => unimplemented!(),

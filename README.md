@@ -116,7 +116,8 @@ The page table contains 64-bit entries following the following format, allowing 
 | **2**   | Read | Read operations are permitted to this page |
 | **3-63** | Address | The address payload, containing more or less extension bits depending on the bitmode |
 
-In that way, the relevant information is contained in `32 + 3 = 35` bits, which forces the usage of `u64`. Essentially, bits 35 to 63 are ALWAYS extension bits. We can represent a **little-endian** linear version of a PTE (little-endian):
+> [!WARNING]  
+> Preconfigured bitmodes shall not be modified, at the risk of being non-functional.
 
 | Bits 3-63 | Bit 2 | Bit 1 | Bit 0 |
 |:-----|:------:|:---:|:----:|
@@ -128,14 +129,12 @@ Minilang exposes the following instruction set:
 - *alloc **byte** **addr**;*  :  allocates a single specified `byte` at address `addr`
 - *struct **byte1 byte2 ... byten**, **addr**;*  :  allocates a bunch of bytes starting at address `addr`, in a way equivalent to C-lang *packed* structs.
 
-#### Minilang toplevel
-
-The toplevel is furnished with the package as *a separate client* (Python 3.x) which permits the **input of MiniLang commands in series**.
+> [!NOTE]
+> The toplevel is furnished with the package as *a separate client* (Python 3.x) which permits the **input of MiniLang commands in series**.
 
 #### Signalling
 
-The server uses signals to tell the client what the last received command did and some more info about how the client changed the server's internal state (maybe after an `AllocRequest`, the client could be happy to know how legal the operation was...)
-
+The server uses **signals** to tell the client what the **last command** did and some more info about how the client changed the server's internal state.
 The strict signal specification is summed up in the following table:
 
 | Command | Signal |

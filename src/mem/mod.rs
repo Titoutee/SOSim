@@ -12,12 +12,14 @@ use crate::{
         paging::{Flag, FrameAllocator, Page},
     },
 };
+use std::sync::Arc;
 
 pub const PAGE_NUMBER: u32 = MEM_CTXT.page_count;
 pub const PHYS_TOTAL: usize = (MEM_CTXT.page_count * MEM_CTXT.page_size as u32) as usize;
 
 use anyhow::Context;
 use config::bitmode::Addr;
+use lazy_static::lazy_static;
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -38,15 +40,17 @@ pub enum BitMode {
     Bit32,
     Bit64,
 }
-
-type EmptyO = Option<()>;
-type MemResult<T> = Result<T, Fault>;
+pub type MemResult<T> = Result<T, Fault>;
 
 pub struct Stack {
     base: Addr,
     sz: Addr, // Current stack size (i.e., how much of the stack is currently used)
     sp: Addr,
     cap: Addr, // Stack capacity (i.e., maximum stack size, which is the same as the stack segment size)
+}
+
+lazy_static! {
+    pub static ref MEMORY: Arc<Memory> = Arc::new(Memory::new());
 }
 
 impl Default for Stack {
@@ -300,7 +304,7 @@ impl Memory {
     }
 
     // Read
-    fn read_at<T>(&self, addr: Addr) -> MemResult<Vec<Byte>> {
+    pub fn read_at<T>(&self, addr: Addr) -> MemResult<Vec<Byte>> {
         self.get_page_of(addr)
             .ok_or(Fault::_from(FaultType::InvalidPage))?
             .read::<T>(addr)
@@ -316,7 +320,7 @@ impl Memory {
 
     /// Writes bytes at `addr`
     /// Mostly used in a non-allocation-guarded context.
-    fn _write_at_addr<T>(&mut self, addr: Addr, bytes: &[u8]) -> Option<()> {
+    pub fn _write_at_addr<T>(&mut self, addr: Addr, bytes: &[u8]) -> Option<()> {
         // e.g.: Write no-alloc
         let page = self.get_page_of_mut(addr)?;
 
@@ -476,6 +480,8 @@ mod tests_memory {
     // use num::rational;
 
     use std::vec;
+
+    use crate::lang::Struct;
 
     use super::*;
 
@@ -694,6 +700,7 @@ mod tests_memory {
                 .all(|p| *p.0 != addr / (MEM_CTXT.page_size as u32))
         );
     }
+
     #[test]
     fn test_pretty_print() {
         let mut mem = Memory::new();

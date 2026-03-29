@@ -1,12 +1,14 @@
 mod parse;
 pub use parse::Command;
 use parse::parser;
-pub mod event;
 pub mod script;
 pub mod toplevel;
 
 pub use script::parse_src;
 pub use toplevel::TopLevel;
 
-pub type Byte = u8;
-pub struct Struct<const N: usize>([Byte; N]);
+pub use parse::Byte;
+pub enum Struct {
+    Byte(Byte),
+    Aggregate(Vec<Struct>),
+}

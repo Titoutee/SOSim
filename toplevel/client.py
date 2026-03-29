@@ -26,6 +26,7 @@ while True:
     if back == 3:
         print("Unimplemented command...")
     if back == 4:  # EXIT signal code
+        print("Connection closed!")
         break
 
 

@@ -3,6 +3,7 @@ use sosim::{
     Machine,
     lang::{script::parse_src, toplevel::TopLevel},
     mem::addr::Addr,
+    process::Process,
 };
 use std::{fs::read_to_string, net::SocketAddrV4};
 
@@ -24,9 +25,6 @@ struct Cli {
     // If None, then simulator launched in dynamic toplevel interpreter mode
     #[arg(short, long)]
     socket: Option<SocketAddrV4>, // Parsed from standard string parsing format: a.d.d.r:port
-
-    #[arg(short, long)]
-    stack_sz: Addr,
 }
 
 #[allow(unused)]
@@ -34,13 +32,9 @@ struct Cli {
 async fn main() {
     // println!("{}", size_of::<PTEntry>());
     // println!("align of S: {}", std::mem::align_of::<PTEntry>());
-    let machine = Machine::new();
-
-    // Process...
-
-    println!("Max. concurrent processes number: {}", num_cpus::get());
-
+    let mut machine = Machine::new();
     let cli = Cli::parse();
+
     println!("Parsing arguments [...]");
 
     if let Some(path) = cli.file {
@@ -50,7 +44,11 @@ async fn main() {
     } else {
         println!("[Toplevel interpreting mode]");
         println!("[Server startup]");
+        let id = machine.create_process();
+        println!("Process with id {} created!", id);
 
-        TopLevel::_spawn(cli.socket).await.unwrap();
+        TopLevel::_spawn(cli.socket, machine.get_process(id).unwrap())
+            .await
+            .unwrap();
     }
 }

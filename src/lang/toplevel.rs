@@ -2,7 +2,9 @@
 //! Using a separate CLI for feeding in commands line by line is more convenient :D
 
 use super::Command;
+use crate::fault::Fault;
 use crate::lang::parse_src;
+use crate::mem::MemResult;
 use crate::process::Process;
 use bytes::BytesMut;
 use std::io::{self, Write};
@@ -21,8 +23,8 @@ async fn _signal(top: &mut TopLevel, sig: u8) -> io::Result<usize> {
     top.stream.write(&sig.to_be_bytes()).await
 }
 
-// Main routine of the toplevel thread, which gets MiniLang commands from the external CLI and sends them to the parser in order.
-async fn _main(mut top: TopLevel) -> Option<()> {
+// Main routine of the toplevel thread, which gets MiniLang commands from the external CLI and sends them to the parser in the order they arrive.
+async fn _main(proc: &mut Process, mut top: TopLevel) -> MemResult<()> {
     loop {
         top.flush_stream().await;
         // println!("Try!!!");
@@ -33,15 +35,19 @@ async fn _main(mut top: TopLevel) -> Option<()> {
                 println!("Got valid command!");
                 match i {
                     Command::Exit => {
-                        let _n = _signal(&mut top, 4).await.ok()?;
+                        let _n = _signal(&mut top, 4)
+                            .await
+                            .map_err(|_| Fault::_from(crate::fault::FaultType::SignallingFault))?;
                         println!("[{} bytes written to the client]", _n);
                         println!("Client exited gracefully...");
                         break;
                     }
                     _ => {
-                        let sig = Process::_exec(&i);
-                        let _n = _signal(&mut top, sig as u8).await.ok()?; // Serialization happens here
-                        println!("[{} bytes written to the client]", _n);
+                        let sig = proc._exec(&i)?;
+                        let _n = _signal(&mut top, sig as u8)
+                            .await
+                            .map_err(|_| Fault::_from(crate::fault::FaultType::SignallingFault))?; // Serialization happens here
+                        println!("[{} bytes written to the client]", _n as u8);
                     }
                 }
             }
@@ -56,7 +62,7 @@ async fn _main(mut top: TopLevel) -> Option<()> {
             }
         };
     }
-    None
+    Ok(())
 }
 
 /// A `TopLevel` really is just a separate thread which reads in standard input rather than a specified file.
@@ -69,7 +75,7 @@ pub struct TopLevel {
     pub buffer: BytesMut,
 }
 
-impl TopLevel {
+impl<'a> TopLevel {
     async fn new(stream: TcpStream) -> NetResult<TopLevel> {
         Ok(TopLevel {
             stream,
@@ -105,7 +111,7 @@ impl TopLevel {
     }
 
     // Spawns a new command server which the external toplevel binds to
-    pub async fn _spawn(bind: Option<SocketAddrV4>) -> NetResult<()> {
+    pub async fn _spawn(bind: Option<SocketAddrV4>, proc: &mut Process) -> NetResult<()> {
         let socket = if let Some(b) = bind {
             b
         } else {
@@ -130,15 +136,49 @@ impl TopLevel {
             n, NET_SOCK_CFG_PATH
         );
 
-        //
+        // Net
 
         let listener = TcpListener::bind(socket).await?;
         let s = listener.accept().await.expect("Connection failed..."); // Blocking
         println!("Client of socket address {}", s.1);
         let top = TopLevel::new(s.0).await?;
 
-        _main(top).await;
+        _main(proc, top).await;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::lang::parse_src;
+
+    #[test]
+    fn test_parse() {
+        let src = "alloc 1 at 0; alloc 2 at 1; alloc 3 at 2; dbg; dealloc at 1; dbg;";
+        let cmds = parse_src(src.to_string()).unwrap();
+        println!("{:?}", cmds);
+    }
+
+    #[test]
+    fn test_parse_expr() {
+        let src = "alloc 1+2*3 at 0; alloc (1+2)*3 at 1; dbg;";
+        let cmds = parse_src(src.to_string()).unwrap();
+        println!("{:?}", cmds);
+    }
+
+    #[test]
+    fn test_parse_struct() {
+        let src = "struct a {a: 1, b: 2} at 0; dbg;";
+        let cmds = parse_src(src.to_string()).unwrap();
+        println!("{:?}", cmds);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_parse_unknown() {
+        let src = "unknown command";
+        let cmds = parse_src(src.to_string()).unwrap();
+        println!("{:?}", cmds);
     }
 }

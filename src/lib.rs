@@ -2,7 +2,7 @@
 // be given in the future to this piece of functionality.
 // Alternatively, it can pinpoint unecessary implemenatation bits or method/function/procedure calls (mostly cloning, ...).
 
-use crate::mem::Memory;
+use crate::mem::MEMORY;
 use process::Process;
 
 pub mod ext;
@@ -11,45 +11,38 @@ pub mod lang;
 pub mod mem;
 pub mod process;
 
-pub type ProcessList<'a> = Vec<Process<'a>>;
+pub type ProcessList = Vec<Process>;
 
-pub struct Machine<'a> {
+pub struct Machine {
     id_c: usize,
-    mem: Memory,
-    processes: ProcessList<'a>,
+    processes: ProcessList,
 }
 
-impl<'a> Machine<'a> {
-    pub fn new() -> Machine<'a> {
-        let mem = Memory::new();
+impl Machine {
+    pub fn new() -> Machine {
         Machine {
             id_c: 0,
             processes: vec![],
-            mem,
         }
     }
 
     // O(n) which is reasonable for average usecase
-    pub fn get_process(&self, id: usize) -> Option<&Process<'a>> {
-        self.processes.iter().filter(|x| x.pid == id).next()
+    pub fn get_process(&mut self, id: usize) -> Option<&mut Process> {
+        self.processes.iter_mut().filter(|x| x.pid == id).next()
     }
 
-    pub fn create_process(&'a mut self) {
+    pub fn create_process(&mut self) -> usize {
         let p = Process {
             pid: self.id_c,
-            mem: &self.mem,
+            mem: MEMORY.clone(),
             page_table: Default::default(),
             context: Default::default(),
         };
+        let pid = p.pid;
         self.processes.push(p);
         self.id_c += 1;
+        pid
     }
-
-    pub fn add_process(&'a mut self, mut new: Process<'a>) {
-        new.mem = &self.mem;
-        self.processes.push(new);
-    }
-
     pub fn kill_process(&mut self, id: usize) -> Option<()> {
         let _ = self.processes.get(id)?;
         self.processes.remove(id);
