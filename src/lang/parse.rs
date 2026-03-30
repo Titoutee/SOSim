@@ -1,7 +1,6 @@
 // The minilang parser of SOSim.
 // Please read the README for more info about how that miniature language works.
 
-use crate::mem::MemResult;
 use crate::mem::addr::Addr;
 use peg;
 
@@ -13,16 +12,11 @@ pub type AddrToParse = Addr;
 pub type Byte = u8;
 
 trait _Aggr<T> {
-    fn from_(i: T) -> Self;
     #[allow(dead_code)]
     fn from_s(i: Vec<T>) -> Self;
 }
 
 impl<T> _Aggr<T> for Vec<T> {
-    fn from_(i: T) -> Self {
-        vec![i]
-    }
-
     fn from_s(i: Vec<T>) -> Self {
         i
     }
@@ -57,6 +51,12 @@ pub struct _AllocStructReq {
     pub label: Option<String>,
 }
 
+impl _AllocStructReq {
+    pub fn as_alloc(&self) -> Vec<Scalar> {
+        self.fields.iter().map(|(_, c)| *c).collect()
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct _DeallocReq {
@@ -68,7 +68,7 @@ pub struct _DeallocReq {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct _WriteReq {
     pub at: Addr,
-    pub scalar: Scalar, // Scalar replacing at `at`
+    pub byte: Scalar, // Scalar replacing at `at`
 }
 
 #[allow(dead_code)]
@@ -80,10 +80,12 @@ pub struct _ReadReq {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Command {
     Alloc(_AllocReq),
-    Alloc_Struct(_AllocStructReq), // Structs are aggregates of scalars with field names, so we can just use the same struct for both scalar and struct allocations.
+    AllocStruct(_AllocStructReq), // Structs are aggregates of scalars with field names, so we can just use the same struct for both scalar and struct allocations.
     Dealloc(_DeallocReq),
     Write((_WriteReq, bool)), // Bool is whether to write checked or not.
     Read((_ReadReq, bool)),   // Bool is whether to read checked or not.
+    WriteAggr((Vec<_WriteReq>, bool)), // For writing multiple words at once, e.g. for structs. Bool is whether to write checked or not.
+    ReadAggr((Vec<_ReadReq>, bool)), // For reading multiple words at once, e.g. for structs. Bool is whether to read checked or not.
     Exit,
     Debug,
     Empty, // Init
@@ -104,10 +106,22 @@ peg::parser! {
             = d:var_declare() _ "=" _ e:expression() _ {(d, vec![e])}
 
         pub (crate) rule checked_write() -> Command
-            = _ "cwrite" _ a:addr() _ s:scalar() _ {Command::Write((_WriteReq { at: a.into(), scalar: s }, true))}
+            = _ "cwrite" _ a:addr() _ s:scalar() _ {Command::Write((_WriteReq { at: a.into(), byte: s }, true))}
 
         pub (crate) rule unchecked_write() -> Command
-            = _ "write" _ a:addr() _ s:scalar() _ {Command::Write((_WriteReq { at: a.into(), scalar: s }, false))}
+            = _ "write" _ a:addr() _ s:scalar() _ {Command::Write((_WriteReq { at: a.into(), byte: s }, false))}
+
+        pub (crate) rule write_aggr() -> Command
+            = _ "writes" _ a:addr() _ "{" _ s:scalar()** "," _ "}" _ {Command::WriteAggr((s.into_iter().enumerate().map(|(i, byte)| _WriteReq { at: a + i as Addr, byte }).collect(), false))}
+
+        pub (crate) rule checked_write_aggr() -> Command
+            = _ "cwrites" _ a:addr() _ "{" _ s:scalar()** "," _ "}" _ {Command::WriteAggr((s.into_iter().enumerate().map(|(i, byte)| _WriteReq { at: a + i as Addr, byte }).collect(), true))}
+
+        pub (crate) rule read_aggr() -> Command
+            = _ "reads" _ a:addr() _ "{" _ s:scalar()** "," _ "}" _ {Command::ReadAggr((s.into_iter().enumerate().map(|(i, _)| _ReadReq { at: a + i as Addr }).collect(), false))}
+
+        pub (crate) rule checked_read_aggr() -> Command
+            = _ "creads" _ a:addr() _ "{" _ s:scalar()** "," _ "}" _ {Command::ReadAggr((s.into_iter().enumerate().map(|(i, _)| _ReadReq { at: a + i as Addr }).collect(), true))}
 
         pub (crate) rule checked_read() -> Command
             = _ "cread" _ a:addr() _ {Command::Read((_ReadReq { at: a.into() }, true))}
@@ -140,10 +154,13 @@ peg::parser! {
             = _ "alloc" _ b:expression() _ "at" _ a:addr() _ {Command::Alloc(_AllocReq { byte: b, at: Some(a.into()), label: None })}
 
         pub rule alloc_struct() -> Command // Structs are aggregates of scalars with field names
-            = _ "struct" _ i:identifier() _ "{" _ f:struct_field()** "," _ "}" _ "at" _ a:addr() _ {Command::Alloc_Struct(_AllocStructReq { fields: f, at: Some(a.into()), label: Some(i) })}
+            = _ "struct" _ i:identifier() _ "{" _ f:struct_field()** "," _ "}" _ "at" _ a:addr() _ {Command::AllocStruct(_AllocStructReq { fields: f, at: Some(a.into()), label: Some(i) })}
+
         pub (crate) rule dealloc() -> Command
             = _ "dealloc" _ "at" _ a:addr() _ {Command::Dealloc(_DeallocReq {at: a})}
 
+        pub (crate) rule dealloc_struct() -> Command
+            = _ "dealloc" _ i:identifier() _ {Command::Dealloc(_DeallocReq {at: 0})} // For now, we ignore the identifier and just deallocate at 0. We can later add a symbol table to keep track of labels and their corresponding addresses.
         // Only for interpreted context
         pub (crate) rule exit() -> Command
             = _ "exit" _ {Command::Exit}
@@ -241,7 +258,7 @@ mod test {
         let cmd = "struct s {a: 24, b: 35, c: 64} at 0;";
         assert_eq!(
             parser::cmd(cmd).unwrap(),
-            Command::Alloc_Struct(_AllocStructReq {
+            Command::AllocStruct(_AllocStructReq {
                 fields: vec![("a".into(), 24), ("b".into(), 35), ("c".into(), 64)],
                 at: Some(0),
                 label: Some("s".into())

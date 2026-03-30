@@ -134,10 +134,10 @@ impl Page {
     }
 
     // Writes a data blob to the page at the specified address. The size of the data blob is determined by the type parameter T, which can be any type that implements the Sized trait. The method calculates the offset within the page based on the provided address and writes the data blob to the page's data array starting from that offset. If the data blob is larger than the remaining space in the page, it will only write as much as fits within the page.
-    pub fn write<T>(
+    pub fn write(
         &mut self,
         addr: Addr,
-        data: &[u8], /* The data blob to be written at addr */
+        data: Vec<u8>, /* The data blob to be written at addr */
     ) -> MemResult<()> {
         if !self.writable() {
             return Err(Fault::_from(
@@ -147,7 +147,7 @@ impl Page {
 
         let page_addr = self.ppn_as_addr();
 
-        let size = std::mem::size_of::<T>(); // The size of the data blob to be written, determined by the type parameter T. This allows the method to know how many bytes to write based on the type of data being written.
+        let size = data.len(); // The size of the data blob to be written, determined by the type parameter T. This allows the method to know how many bytes to write based on the type of data being written.
         let s = (addr - page_addr) as usize;
         let e = s + size;
         let mut i = 0;
@@ -160,7 +160,7 @@ impl Page {
         Ok(())
     }
 
-    pub fn read<T>(&self, addr: Addr) -> MemResult<Vec<u8>> {
+    pub fn read(&self, addr: Addr, len: usize) -> MemResult<Vec<u8>> {
         if !self.readable() {
             return Err(Fault::_from(crate::fault::FaultType::ReadPermissionDenied(
                 addr,
@@ -168,19 +168,18 @@ impl Page {
         }
 
         let page_addr = self.ppn_as_addr();
-        let size = std::mem::size_of::<T>();
         let s = (addr - page_addr) as usize;
-        let e = s + size;
+        let e = s + len;
         Ok(self.data[s..e].to_vec())
     }
 
     /// Zeroes a page.
     pub fn zero(&mut self) {
-        self.write::<[u8; 4096]>(0, &[0; 4096]);
+        self.write(0, vec![0; 4096]);
     }
 
     pub fn copy(&mut self, other: &Page) {
-        self.write::<[u8; MEM_CTXT.page_size as usize]>(0, &other.data);
+        self.write(0, other.data.to_vec());
     }
 }
 
@@ -240,7 +239,6 @@ impl FrameAllocator {
             free.insert(ppn, Page::new(ppn));
             addr += MEM_CTXT.page_size;
         }
-        // println!("{:?}", free);
     }
 
     // Get the index of the page with the given ppn in the free list, if it exists. This is used for allocation, to find a free page in the free list and move it to the used list.
@@ -345,10 +343,10 @@ mod tests_paging {
     #[should_panic]
     fn test_page_write_and_read_fail_null_page() {
         let mut page = Page::new(0);
-        let data = [1, 2, 3, 4];
-        page.write::<[u8; 4]>(0, &data).unwrap();
+        let data = [1, 2, 3, 4].to_vec();
+        page.write(0, data.clone()).unwrap();
         // Dead zone
-        let read_data = page.read::<[u8; 4]>(0).unwrap();
+        let read_data = page.read(0, 4).unwrap();
         assert_eq!(data.to_vec(), read_data);
     }
 
@@ -357,10 +355,10 @@ mod tests_paging {
         let mut page = Page::new(1);
         page.pte.set_flag(Flag::Writable);
         page.pte.set_flag(Flag::Read);
-        let data = [1, 2, 3, 4];
-        page.write::<[u8; 4]>(4096, &data).unwrap();
-        let read_data = page.read::<[u8; 4]>(4096).unwrap();
-        assert_eq!(data.to_vec(), read_data);
+        let data = [1, 2, 3, 4].to_vec();
+        page.write(4096, data.clone()).unwrap();
+        let read_data = page.read(4096, 4).unwrap();
+        assert_eq!(data, read_data);
     }
 
     #[test]
