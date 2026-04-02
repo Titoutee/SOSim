@@ -1,0 +1,78 @@
+
+running 63 tests
+test lang::parse::test::_alloc_scalar ... ok
+test lang::parse::test::_alloc_aggr ... ok
+test lang::parse::test::_alloc_scalar_2 ... ok
+test lang::parse::test::_dealloc ... ok
+test lang::parse::test::expression_add ... ok
+test lang::parse::test::expression_min ... ok
+test lang::parse::test::expression_add_par ... ok
+test lang::parse::test::expression_par ... ok
+test lang::toplevel::tests::test_parse_expr ... ok
+test lang::parse::test::ill_command_semicolon - should panic ... ok
+test lang::parse::test::expression_mod ... ok
+test lang::toplevel::tests::test_parse ... ok
+test lang::toplevel::tests::test_parse_unknown - should panic ... ok
+test lang::toplevel::tests::test_parse_struct ... ok
+test mem::addr::tests_addr::physical_addr_get ... ok
+test mem::addr::tests_addr::address_get_offset ... ok
+test mem::addr::tests_addr::physical_construction ... ok
+test mem::addr::tests_addr::vaddr_from_raw_addr_32b ... ok
+test mem::addr::tests_addr::vaddr_mask_levels ... ok
+test mem::addr::tests_addr::vaddr_mask_offset ... ok
+test mem::addr::tests_addr::virtual_to_physical_conversion ... ok
+test mem::paging::tests_paging::test_page_is_in ... ok
+test mem::paging::tests_paging::test_page_new ... ok
+test mem::paging::tests_paging::test_page_ref_counting ... ok
+test mem::paging::tests_paging::test_frame_allocator_push_free_and_used ... ok
+test mem::paging::tests_paging::test_page_write_and_read_fail_null_page - should panic ... ok
+test mem::paging::tests_paging::test_init_frame_allocator ... ok
+test mem::paging::tests_paging::test_pte_get_ppn ... ok
+test mem::paging::tests_paging::test_pte_clear_flags ... ok
+test mem::paging::tests_paging::test_pte_set_and_get_flags ... ok
+test mem::paging::tests_paging::test_page_write_and_read ... ok
+test mem::paging::tests_paging::test_pte_new ... ok
+test mem::tests_memory::test_get_ppn_of_base_addr_2 ... ok
+test mem::tests_memory::get_ppn_of_addr_not_allocated_address_out_of_range ... ok
+test mem::tests_memory::test_get_ppn_of_base_addr ... ok
+test mem::tests_memory::test_alloc_checked_with_shrink_no_fit ... ok
+test mem::tests_memory::test_get_ppn_of_base_addr_3 ... ok
+test mem::tests_memory::test_memory_alloc_and_dealloc ... ok
+test mem::tests_memory::test_get_ppns_for_range ... ok
+test mem::tests_memory::test_memory_alloc_checked_conflict ... ok
+test mem::tests_memory::test_memory_alloc_and_dealloc_double_free - should panic ... ok
+test mem::tests_memory::test_memory_alloc_checked_conflict_positive ... ok
+test mem::tests_memory::test_memory_alloc_checked_overlap_conflict3 ... ok
+test mem::tests_memory::test_memory_alloc_checked_overlap_conflict2 ... ok
+test mem::tests_memory::test_memory_alloc_checked_overlap_conflict1 ... ok
+test mem::tests_memory::test_memory_alloc_checked_stack_conflict ... ok
+test mem::tests_memory::test_memory_alloc_checked_overlap_conflict4 ... ok
+test mem::tests_memory::test_memory_get_segment_neutral ... ok
+test mem::tests_memory::test_pretty_print ... ok
+test mem::tests_memory::test_mmu_new_init ... ok
+test mem::tests_memory::test_memory_get_segment_stack ... ok
+test mem::tests_memory::test_stack_pop_sp ... ok
+test mem::tests_memory::test_stack_pop_sp_underflow ... ok
+test mem::tests_memory::test_stack_push_sp ... ok
+test mem::tests_memory::test_stack_push_sp_checked_overflow ... ok
+test mem::tests_memory::test_mark_page_as_used_and_free ... ok
+test process::test::test_exec_alloc_and_dealloc ... ok
+test process::test::test_exec_alloc_struct ... ok
+test process::test::test_exec_dealloc_struct ... ok
+test process::test::test_exec_noop ... ok
+test process::test::test_exec_exit ... ok
+test process::test::test_exec_write_and_read ... ok
+test process::test::test_exec_debug ... ok
+
+test result: ok. 63 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

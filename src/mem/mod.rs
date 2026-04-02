@@ -342,7 +342,7 @@ impl Memory {
     }
 
     // Checks for no conflict with stack and other already present allocations
-    pub fn _alloc_checked(&mut self, addr: Addr, n: usize, shrink: bool) -> MemResult<()> {
+    pub fn _alloc_checked(&mut self, addr: Addr, n: usize /*shrink: bool*/) -> MemResult<()> {
         // TODO: `shrink` option to try to fit in the available space if there is a conflict, instead of just returning None
         // If `shrink` is true, it will try to shrink the allocation size to fit in the available space if there is a conflict, instead of just returning None
         if self.alloc_var.get(&addr).is_some() {
@@ -413,16 +413,29 @@ impl Memory {
         }
     }
 
-    // Always push a singular byte from stack using `_push` only
+    // Always push a singular byte from stack using `_push` or `_push_checked` only
+    fn ensure_stack_page_allocated(&mut self, addr: Addr) -> MemResult<()> {
+        if self.get_page_of(addr).is_err() {
+            self.mark_pages_as_used(addr, MEM_CTXT.page_size)?; // Alloc the page at first push on the stack
+            self._set_page_permissions(addr, MEM_CTXT.page_size, true, true);
+        }
+        Ok(())
+    }
+
     pub fn _push(&mut self, byte: Byte) -> MemResult<()> {
-        self._write_at_addr(self.ram().stack.sp, vec![byte]);
+        self.ensure_stack_page_allocated(self.ram().stack.sp)?;
+        self._write_at_addr(self.ram().stack.sp, vec![byte])?;
         self.ram_mut().stack._push_sp(); // Push occurs after to prevent reference conflict with the read of the byte at the current stack pointer address
         Ok(())
     }
 
     pub fn _push_checked(&mut self, byte: Byte) -> MemResult<()> {
-        self._write_at_addr(self.ram().stack.sp, vec![byte]);
-        self.ram_mut().stack._push_sp_checked()?;
+        if self.ram().stack.sp >= self.ram().stack.cap {
+            return Err(Fault::_from(FaultType::StackOverflow(0)));
+        }
+        self.ensure_stack_page_allocated(self.ram().stack.sp)?;
+        self._write_at_addr(self.ram().stack.sp, vec![byte])?;
+        self.ram_mut().stack._push_sp();
         Ok(())
     }
 
@@ -521,7 +534,7 @@ mod tests_memory {
     fn test_memory_alloc_checked_conflict() {
         let mut memory = Memory::new();
         memory._alloc(1000, 64).unwrap();
-        memory._alloc_checked(1000, 65, false); // Should not allocate again
+        memory._alloc_checked(1000, 65); // Should not allocate again
         assert_eq!(memory.alloc_var.get(&1000), Some(&64));
     }
 
@@ -537,7 +550,7 @@ mod tests_memory {
     fn test_memory_alloc_checked_stack_conflict() {
         let mut memory = Memory::new();
         let stack_addr = memory.ram().stack.base + 10;
-        memory._alloc_checked(stack_addr, 64, false); // Should not allocate
+        memory._alloc_checked(stack_addr, 64); // Should not allocate
         assert!(!memory.alloc_var.contains_key(&stack_addr));
     }
 
@@ -545,7 +558,7 @@ mod tests_memory {
     fn test_memory_alloc_checked_overlap_conflict1() {
         let mut memory = Memory::new();
         memory._alloc(1000, 64).unwrap();
-        memory._alloc_checked(1020, 64, false); // Should not allocate due to overlap
+        memory._alloc_checked(1020, 64); // Should not allocate due to overlap
         assert!(!memory.alloc_var.contains_key(&1020));
     }
 
@@ -553,7 +566,7 @@ mod tests_memory {
     fn test_memory_alloc_checked_overlap_conflict2() {
         let mut memory = Memory::new();
         memory._alloc(1000, 64).unwrap();
-        memory._alloc_checked(990, 20, false); // Should not allocate due to overlap
+        memory._alloc_checked(990, 20); // Should not allocate due to overlap
         assert!(!memory.alloc_var.contains_key(&990));
     }
 
@@ -561,7 +574,7 @@ mod tests_memory {
     fn test_memory_alloc_checked_overlap_conflict3() {
         let mut memory = Memory::new();
         memory._alloc(1000, 64).unwrap();
-        memory._alloc_checked(1020, 2, false); // Should not allocate due to overlap
+        memory._alloc_checked(1020, 2); // Should not allocate due to overlap
         assert!(!memory.alloc_var.contains_key(&1020));
     }
 
@@ -569,7 +582,7 @@ mod tests_memory {
     fn test_memory_alloc_checked_overlap_conflict4() {
         let mut memory = Memory::new();
         memory._alloc(10029, 64).unwrap();
-        memory._alloc_checked(10030, 2, false); // Should not allocate due to overlap
+        memory._alloc_checked(10030, 2); // Should not allocate due to overlap
         assert!(!memory.alloc_var.contains_key(&10030));
     }
 
@@ -587,7 +600,7 @@ mod tests_memory {
     fn test_alloc_checked_with_shrink_no_fit() {
         let mut memory = Memory::new();
         memory._alloc(1000, 64).unwrap();
-        memory._alloc_checked(1020, 10, true); // Should shrink to 0 bytes and not allocate
+        memory._alloc_checked(1020, 10); // Should shrink to 0 bytes and not allocate
         assert!(!memory.alloc_var.contains_key(&1020));
     }
 

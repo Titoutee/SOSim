@@ -2,22 +2,15 @@
 
 use crate::lang::Byte;
 use crate::lang::Command::{self, *};
+#[allow(unused)]
 use crate::lang::parse::{_AllocReq, _AllocStructReq, _DeallocReq, _ReadReq, _WriteReq};
 use crate::mem::MemResult;
 use crate::mem::Memory;
 use std::sync::{Arc, Mutex};
-// TODO: Replace with the correct module path if PageTable is defined elsewhere
-
-#[derive(Debug, Default)]
-pub struct ProcessContext {
-    pub registers: [u32; 32], // General-purpose registers
-    pub pc: u32,              // Program counter
-}
 
 // Signal to send to the client in responding to requests.
 // Manual discriminants correspond to the signalling specification detailed in readme.
 // This signal specification is some sort of enum serialization.
-
 // THIS EXACT spec has to be used as part of any client that pays attention to the server payloads:
 pub enum Signal {
     Empty = 6,
@@ -34,7 +27,6 @@ pub enum Signal {
 pub struct Process {
     pub pid: usize,
     pub mem: Arc<Mutex<Memory>>, // Backup reference to main memory
-    pub context: ProcessContext,
 }
 
 impl Process {
@@ -153,7 +145,6 @@ mod test {
         let mut process = super::Process {
             pid: 1,
             mem: std::sync::Arc::new(std::sync::Mutex::new(crate::mem::Memory::new())),
-            context: super::ProcessContext::default(),
         };
 
         let signal = process._exec(&super::Command::Debug).unwrap();
@@ -165,7 +156,6 @@ mod test {
         let mut process = super::Process {
             pid: 1,
             mem: std::sync::Arc::new(std::sync::Mutex::new(crate::mem::Memory::new())),
-            context: super::ProcessContext::default(),
         };
 
         let alloc_req = super::_AllocReq {
@@ -190,7 +180,6 @@ mod test {
         let mut process = super::Process {
             pid: 1,
             mem: std::sync::Arc::new(std::sync::Mutex::new(crate::mem::Memory::new())),
-            context: super::ProcessContext::default(),
         };
 
         let _prealloc_req = super::_AllocReq {
@@ -226,7 +215,6 @@ mod test {
         let mut process = super::Process {
             pid: 1,
             mem: std::sync::Arc::new(std::sync::Mutex::new(crate::mem::Memory::new())),
-            context: super::ProcessContext::default(),
         };
 
         let signal = process._exec(&super::Command::Exit).unwrap();
@@ -238,7 +226,6 @@ mod test {
         let mut process = super::Process {
             pid: 1,
             mem: std::sync::Arc::new(std::sync::Mutex::new(crate::mem::Memory::new())),
-            context: super::ProcessContext::default(),
         };
 
         let alloc_struct_req = super::_AllocStructReq {
@@ -258,7 +245,6 @@ mod test {
         let mut process = super::Process {
             pid: 1,
             mem: std::sync::Arc::new(std::sync::Mutex::new(crate::mem::Memory::new())),
-            context: super::ProcessContext::default(),
         };
 
         let alloc_struct_req = super::_AllocStructReq {
@@ -283,7 +269,6 @@ mod test {
         let mut process = super::Process {
             pid: 1,
             mem: std::sync::Arc::new(std::sync::Mutex::new(crate::mem::Memory::new())),
-            context: super::ProcessContext::default(),
         };
 
         let signal = process._exec(&super::Command::Empty).unwrap();

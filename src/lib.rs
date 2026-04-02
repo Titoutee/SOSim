@@ -35,7 +35,6 @@ impl Machine {
         let p = Process {
             pid: self.id_c,
             mem: MEMORY.clone(),
-            context: Default::default(),
         };
         let pid = p.pid;
         self.processes.push(p);

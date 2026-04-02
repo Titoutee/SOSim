@@ -19,6 +19,7 @@ pub enum Flag {
 pub struct PageTableEntry(pub u32);
 
 impl PageTableEntry {
+    #[allow(unused)]
     pub(crate) fn new(addr: u32) -> Self {
         Self(addr << 3 & !0x7u32) // Clear the 3 LSBs, which are reserved for flags, to ensure a clean initial state.
     }
@@ -174,12 +175,12 @@ impl Page {
     }
 
     /// Zeroes a page.
-    pub fn zero(&mut self) {
-        self.write(0, vec![0; 4096]);
+    pub fn zero(&mut self) -> MemResult<()> {
+        self.write(0, vec![0; 4096])
     }
 
-    pub fn copy(&mut self, other: &Page) {
-        self.write(0, other.data.to_vec());
+    pub fn copy(&mut self, other: &Page) -> MemResult<()> {
+        self.write(0, other.data.to_vec())
     }
 }
 

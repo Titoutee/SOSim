@@ -2,8 +2,6 @@ use clap::Parser;
 use sosim::{
     Machine,
     lang::{script::parse_src, toplevel::TopLevel},
-    mem::addr::Addr,
-    process::Process,
 };
 use std::{fs::read_to_string, net::SocketAddrV4};
 
@@ -30,8 +28,6 @@ struct Cli {
 #[allow(unused)]
 #[tokio::main]
 async fn main() {
-    // println!("{}", size_of::<PTEntry>());
-    // println!("align of S: {}", std::mem::align_of::<PTEntry>());
     let mut machine = Machine::new();
     let cli = Cli::parse();
 
