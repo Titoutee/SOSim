@@ -22,12 +22,14 @@ while True:
     back = int.from_bytes(socket.recv(4096), byteorder='big')
 
     if back == 1:
-        print("Syntax error...")
+        print("Allocate memory successfully!")
     if back == 3:
-        print("Unimplemented command...")
+        print("Write successfully!")
     if back == 4:  # EXIT signal code
         print("Connection closed!")
         break
+    if back == 7:
+        print("Runtime error on server side.")
 
 
 print("[Client shutdown...]")

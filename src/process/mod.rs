@@ -27,6 +27,7 @@ pub enum Signal {
     Write = 3,
     Read = 4,
     Exit = 0,
+    Fault = 7,
 }
 
 /// A single `Process` instantiated into main memory. It has its own `PageTable` and process context.
@@ -54,7 +55,6 @@ impl Process {
                 self.mem.lock().unwrap()._alloc(addr, 1)?;
 
                 self.mem.lock().unwrap()._write_at_addr(addr, vec![0])?;
-                println!("HURRRRAYYY");
                 Ok(Signal::Alloc)
             }
             AllocStruct(s) => {
@@ -71,12 +71,30 @@ impl Process {
                 self.mem.lock().unwrap()._dealloc(addr)?;
                 Ok(Signal::Dealloc)
             }
+            Push(s) => {
+                // For now, we just push the byte onto the stack without any checks. We can later add checks for stack overflow and other edge cases.
+                self.mem.lock().unwrap()._push_checked(s.byte.into())?;
+                Ok(Signal::Write)
+            }
+            Pop => {
+                // For now, we just pop a byte from the stack without any checks. We can later add checks for stack underflow and other edge cases.
+                let value = self.mem.lock().unwrap()._pop_checked()?;
+                println!("Popped value: {}", value);
+                Ok(Signal::Read)
+            }
             Write((s, checked)) => {
                 let addr = s.at;
-                self.mem
-                    .lock()
-                    .unwrap()
-                    ._write_at_addr(addr, vec![s.byte.into()])?;
+                if *checked {
+                    self.mem
+                        .lock()
+                        .unwrap()
+                        ._write_at_addr_checked(addr, vec![s.byte.into()])?;
+                } else {
+                    self.mem
+                        .lock()
+                        .unwrap()
+                        ._write_at_addr(addr, vec![s.byte.into()])?;
+                }
                 Ok(Signal::Write)
             }
             Read((s, checked)) => {
@@ -122,7 +140,7 @@ impl Process {
                 Ok(Signal::Exit)
             }
 
-            _ => unimplemented!(),
+            Empty => Ok(Signal::Empty),
         }
     }
 }
@@ -261,7 +279,6 @@ mod test {
     }
 
     #[test]
-    #[should_panic]
     fn test_exec_noop() {
         let mut process = super::Process {
             pid: 1,

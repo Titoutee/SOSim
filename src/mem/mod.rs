@@ -17,7 +17,6 @@ use std::sync::{Arc, Mutex};
 pub const PAGE_NUMBER: u32 = MEM_CTXT.page_count;
 pub const PHYS_TOTAL: usize = (MEM_CTXT.page_count * MEM_CTXT.page_size as u32) as usize;
 
-use anyhow::Context;
 use config::bitmode::Addr;
 use lazy_static::lazy_static;
 use serde::Deserialize;
@@ -44,7 +43,6 @@ pub type MemResult<T> = Result<T, Fault>;
 
 pub struct Stack {
     base: Addr,
-    sz: Addr, // Current stack size (i.e., how much of the stack is currently used)
     sp: Addr,
     cap: Addr, // Stack capacity (i.e., maximum stack size, which is the same as the stack segment size)
 }
@@ -58,7 +56,6 @@ impl Default for Stack {
         Stack {
             base: MEM_CTXT.stack_base,
             cap: MEM_CTXT.stack_sz,
-            sz: 0,
             sp: MEM_CTXT.stack_base,
         }
     }
@@ -105,12 +102,7 @@ impl Stack {
     }
 
     pub fn new(base: Addr, cap: Addr) -> Self {
-        Stack {
-            base,
-            cap,
-            sz: 0,
-            sp: 0,
-        }
+        Stack { base, cap, sp: 0 }
     }
 }
 
@@ -457,7 +449,6 @@ mod tests_memory {
     fn test_stack_push_sp() {
         let mut stack = Stack {
             base: 0,
-            sz: 100,
             sp: 0,
             cap: 100,
         };
@@ -469,7 +460,6 @@ mod tests_memory {
     fn test_stack_pop_sp() {
         let mut stack = Stack {
             base: 0,
-            sz: 100,
             sp: 10,
             cap: 100,
         };
@@ -481,7 +471,6 @@ mod tests_memory {
     fn test_stack_pop_sp_underflow() {
         let mut stack = Stack {
             base: 0,
-            sz: 100,
             sp: 0,
             cap: 100,
         };
@@ -492,7 +481,6 @@ mod tests_memory {
     fn test_stack_push_sp_checked_overflow() {
         let mut stack = Stack {
             base: 0,
-            sz: 100,
             sp: 100,
             cap: 100,
         };

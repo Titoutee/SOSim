@@ -1,7 +1,7 @@
 use crate::mem::{
     Memory, PHYS_TOTAL, Stack,
     config::MEM_CTXT,
-    paging::{Flag, FrameAllocator, PageTableEntry},
+    paging::{Flag, PageTableEntry},
 };
 use std::fmt;
 
@@ -12,7 +12,12 @@ impl fmt::Display for Stack {
             "├────────────────────────── Stack ──────────────────────────┤"
         )?;
         writeln!(f, "│ Base:           0x{:08x}", self.base)?;
-        writeln!(f, "│ Size:           0x{:08x} ({} bytes)", self.sz, self.sz)?;
+        writeln!(
+            f,
+            "│ Size:           0x{:08x} ({} bytes)",
+            self.sp - self.base,
+            self.sp - self.base
+        )?;
         writeln!(
             f,
             "│ Capacity:       0x{:08x} ({} bytes)",
@@ -40,7 +45,6 @@ impl fmt::Debug for Stack {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Stack")
             .field("base", &format!("0x{:08x}", self.base))
-            .field("size", &format!("0x{:08x}", self.sz))
             .field("capacity", &format!("0x{:08x}", self.cap))
             .field("pointer", &format!("0x{:08x}", self.sp))
             .finish()
@@ -112,26 +116,15 @@ impl fmt::Display for Memory {
         writeln!(f, "│ Page Size:       {} bytes", MEM_CTXT.page_size)?;
         writeln!(
             f,
-            "│ Virtual Address: {} bits",
+            "│ Virtual Address Offset: {} bits",
             MEM_CTXT.v_addr_lvl_len + MEM_CTXT.v_addr_off_len,
         )?;
+        writeln!(
+            f,
+            "│ Virtual Address Page Number: {} bits",
+            MEM_CTXT.v_addr_lvl_len,
+        )?;
         writeln!(f, "{}", self._ram.stack)?;
-        writeln!(f, "{}", self.alloc)?;
-        Ok(())
-    }
-}
-
-impl fmt::Display for FrameAllocator {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f)?;
-        writeln!(f, "├───────────── Frame Allocator ─────────────┤")?;
-        writeln!(f, "│ Total Frames:   {}", self.total_frames())?;
-        writeln!(f, "│ Free Frames:    {}", self.free_frames())?;
-        writeln!(f, "│ Used Frames:    {}", self.used_frames())?;
-        writeln!(f, "├───────────────────────────────────────────┤")?;
-        //writeln!(f, "│ Free Frame List: {:?}", self.free_list)?;
-        //writeln!(f, "│ Used Frame List: {:?}", self.used_list)?;
-        writeln!(f, "└───────────────────────────────────────────┘")?;
         Ok(())
     }
 }

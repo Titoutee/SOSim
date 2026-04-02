@@ -59,6 +59,12 @@ impl _AllocStructReq {
 
 #[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq, Clone)]
+pub struct PushReq {
+    pub byte: Byte,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct _DeallocReq {
     pub at: Addr,
 }
@@ -86,6 +92,8 @@ pub enum Command {
     Read((_ReadReq, bool)),   // Bool is whether to read checked or not.
     WriteAggr((Vec<_WriteReq>, bool)), // For writing multiple words at once, e.g. for structs. Bool is whether to write checked or not.
     ReadAggr((Vec<_ReadReq>, bool)), // For reading multiple words at once, e.g. for structs. Bool is whether to read checked or not.
+    Push(PushReq),
+    Pop,
     Exit,
     Debug,
     Empty, // Init
@@ -160,7 +168,14 @@ peg::parser! {
             = _ "dealloc" _ "at" _ a:addr() _ {Command::Dealloc(_DeallocReq {at: a})}
 
         pub (crate) rule dealloc_struct() -> Command
-            = _ "dealloc" _ i:identifier() _ {Command::Dealloc(_DeallocReq {at: 0})} // For now, we ignore the identifier and just deallocate at 0. We can later add a symbol table to keep track of labels and their corresponding addresses.
+            = _ "deallocs" _ i:identifier() _ {Command::Dealloc(_DeallocReq {at: 0})} // For now, we ignore the identifier and just deallocate at 0. We can later add a symbol table to keep track of labels and their corresponding addresses.
+
+        pub (crate) rule push() -> Command
+            = _ "push" _ b:expression() _ {Command::Push(PushReq { byte: b })}
+
+        pub (crate) rule pop() -> Command
+            = _ "pop" _ {Command::Pop}
+
         // Only for interpreted context
         pub (crate) rule exit() -> Command
             = _ "exit" _ {Command::Exit}
@@ -178,6 +193,7 @@ peg::parser! {
                 x:(@) _ "/" _ y:@ {x%y}
                 --
                 "(" _ e:expression() _ ")" { e }
+                --
                 l:scalar() { l }
             }
         pub (super) rule cmd() -> Command
@@ -189,6 +205,8 @@ peg::parser! {
             /i:checked_read() ";" {i}
             /i:dealloc() ";" {i}
             /i:dbg() ";" {i}
+            /i:push() ";" {i}
+            /i:pop() ";" {i}
             /i:exit() ";" {i}
 
         pub (crate) rule parse() -> Vec<Command>
@@ -248,6 +266,19 @@ mod test {
             Command::Alloc(_AllocReq {
                 byte: 24,
                 at: Some(0),
+                label: None
+            })
+        );
+    }
+
+    #[test]
+    fn _alloc_scalar_2() {
+        let cmd = "alloc 24 at 8763765;";
+        assert_eq!(
+            parser::cmd(cmd).unwrap(),
+            Command::Alloc(_AllocReq {
+                byte: 24,
+                at: Some(8763765),
                 label: None
             })
         );

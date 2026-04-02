@@ -42,17 +42,25 @@ async fn _main(proc: &mut Process, mut top: TopLevel) -> MemResult<()> {
                         println!("Client exited gracefully...");
                         break;
                     }
-                    _ => {
-                        let sig = proc._exec(&i)?;
-                        let _n = _signal(&mut top, sig as u8)
-                            .await
-                            .map_err(|_| Fault::_from(crate::fault::FaultType::SignallingFault))?; // Serialization happens here
-                        println!("[{} bytes written to the client]", _n as u8);
-                    }
+                    _ => match proc._exec(&i) {
+                        Ok(sig) => {
+                            let _n = _signal(&mut top, sig as u8).await.map_err(|_| {
+                                Fault::_from(crate::fault::FaultType::SignallingFault)
+                            })?;
+                            println!("[{} bytes written to the client]", _n as u8);
+                        }
+                        Err(err) => {
+                            eprintln!("Command execution failed: {:?}", err);
+                            let _n = _signal(&mut top, 7).await.map_err(|_| {
+                                Fault::_from(crate::fault::FaultType::SignallingFault)
+                            })?;
+                            println!("[{} bytes written to the client]", _n as u8);
+                        }
+                    },
                 }
             }
             None => {
-                println!("Unknown problem occured");
+                println!("Ill-shaped or incorrect command");
                 top.stream
                     .write(&(1 as u8).to_be_bytes())
                     .await
@@ -90,24 +98,25 @@ impl<'a> TopLevel {
 
     // Reads in a single command (default = first in command list) which is more handy for toplevel interpreter mode
     pub async fn _read(&mut self) -> Option<Command> {
-        // let string = String::new();
-        let bytes_read = self.stream.read_buf(&mut self.buffer).await.ok()?;
+        loop {
+            if let Some(pos) = self.buffer.iter().position(|&b| b == b';') {
+                let command_bytes = self.buffer.split_to(pos + 1);
+                let cmds = parse_src(
+                    String::from_utf8(command_bytes.to_vec())
+                        .ok()
+                        .expect("utf-8 error"),
+                )
+                .ok()?;
+                println!("{:?}", cmds);
+                return cmds.get(0).cloned();
+            }
 
-        if bytes_read == 0 {
-            println!("Read 0 bytes!!");
-            return None;
+            let bytes_read = self.stream.read_buf(&mut self.buffer).await.ok()?;
+            if bytes_read == 0 {
+                println!("Read 0 bytes!!");
+                return None;
+            }
         }
-
-        // Ok-ish clone
-        let cmds = parse_src(
-            String::from_utf8(self.buffer.to_vec())
-                .ok()
-                .expect("utf-8 error"),
-        )
-        .ok()?;
-        println!("{:?}", cmds);
-        // self.flush_stream().await;
-        cmds.get(0).map(|x| (*x).clone())
     }
 
     // Spawns a new command server which the external toplevel binds to
@@ -143,7 +152,9 @@ impl<'a> TopLevel {
         println!("Client of socket address {}", s.1);
         let top = TopLevel::new(s.0).await?;
 
-        _main(proc, top).await;
+        if let Err(err) = _main(proc, top).await {
+            eprintln!("TopLevel runtime error: {:?}", err);
+        }
 
         Ok(())
     }

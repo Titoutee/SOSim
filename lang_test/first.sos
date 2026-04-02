@@ -1,2 +1,1 @@
-alloc 34 23;
-dealloc 34;
+alloc 65 at 87;
