@@ -2,7 +2,6 @@
 // into the 64b bitset.
 
 use super::addr::Addr;
-pub use crate::ext::{_From, _Into};
 use crate::fault::Fault;
 use crate::mem::addr::Physical;
 use crate::mem::config::MEM_CTXT;

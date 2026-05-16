@@ -8,31 +8,7 @@ pub type Identifier = String;
 pub type Scalar = u8;
 pub type Aggr = Vec<Scalar>;
 pub type AddrToParse = Addr;
-
 pub type Byte = u8;
-
-trait _Aggr<T> {
-    #[allow(dead_code)]
-    fn from_s(i: Vec<T>) -> Self;
-}
-
-impl<T> _Aggr<T> for Vec<T> {
-    fn from_s(i: Vec<T>) -> Self {
-        i
-    }
-}
-
-/// Extension trait for unwrapping command lists. Convenient for unwrapping a single-command list.
-#[allow(dead_code)]
-pub trait Unwrap<U> {
-    fn unwrap_(&self) -> Option<&U>;
-}
-
-impl Unwrap<Command> for Vec<Command> {
-    fn unwrap_(&self) -> Option<&Command> {
-        if self.len() <= 1 { self.get(0) } else { None }
-    }
-}
 
 #[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -96,7 +72,8 @@ pub enum Command {
     Pop,
     Exit,
     Debug,
-    Empty, // Init
+    DebugArea(Addr, Scalar), // Center and zoom for the debug area
+    Empty,                   // Init
 }
 
 // Main lang parser
@@ -137,24 +114,22 @@ peg::parser! {
         pub (crate) rule unchecked_read() -> Command
             = _ "read" _ a:addr() _ {Command::Read((_ReadReq { at: a.into() }, false))}
 
-        rule scalar() -> Scalar
+        pub rule scalar() -> Scalar
             = _ n:$(['0'..='9']+) _ {?
                 let inner = {n.parse::<Scalar>().or(Err("expected Scalar: i8\n"))?};
                 Ok(inner)
             }
 
-        rule addr() -> AddrToParse
+        pub rule addr() -> AddrToParse
             = _ n:$(['0'..='9']+) _ {?
                 let inner = {n.parse::<AddrToParse>().or(Err("expected _Addr: i64\n"))?};
                 Ok(inner)
             }
 
-        rule struct_field() -> (String, Scalar)
+        pub rule struct_field() -> (String, Scalar)
             = i:identifier() _ ":" _ s:expression() _ {
                 (i, s)
             }
-
-
 
         // Allocations have no label for now
         // There is no permission of phantom allocs btw, so that allocations must be at least 1 scalar
@@ -183,6 +158,9 @@ peg::parser! {
         pub (crate) rule dbg() -> Command
             = _ "dbg" _ {Command::Debug}
 
+        pub (crate) rule dbgarea() -> Command
+            = _ "dbgarea" _ a:addr() _ "zoom" _ b:expression() {Command::DebugArea(a.into(), b)}
+
         // Core
         pub (crate) rule expression() -> Scalar
                 = precedence! {
@@ -205,6 +183,7 @@ peg::parser! {
             /i:checked_read() ";" {i}
             /i:dealloc() ";" {i}
             /i:dbg() ";" {i}
+            /i:dbgarea() ";" {i}
             /i:push() ";" {i}
             /i:pop() ";" {i}
             /i:exit() ";" {i}

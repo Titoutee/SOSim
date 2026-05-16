@@ -4,8 +4,6 @@
 
 use crate::mem::MEMORY;
 use process::Process;
-
-pub mod ext;
 pub mod fault;
 pub mod lang;
 pub mod mem;

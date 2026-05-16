@@ -4,6 +4,7 @@ pub mod addr;
 pub mod config;
 pub mod display;
 pub mod paging;
+pub mod visualizer;
 
 use crate::{
     fault::{Fault, FaultType},
@@ -151,6 +152,23 @@ impl Memory {
         &mut self.alloc
     }
 
+    pub fn is_byte_allocated(&self, addr: Addr) -> bool {
+        self.get_page_of(addr).is_ok()
+    }
+
+    // Checks if the given address is involved in any allocation, even if the page containing it is not allocated (e.g., in the case of an allocation that overlaps with an existing one, which is allowed in the non-checked version of alloc)
+    pub fn is_byte_used(&self, addr: Addr) -> bool {
+        self.alloc_var.iter().any(|(&a, &size)| {
+            let range = a..(a + size as u32);
+            range.contains(&addr)
+        })
+    }
+
+    // Checks if the byte is ontained in a page that is allocated but for some reason the process didn't write to it (e.g. it's the zero page or something)
+    pub fn is_byte_reserved(&self, addr: Addr) -> bool {
+        self.is_byte_allocated(addr) && !self.is_byte_used(addr)
+    }
+
     pub fn get_ppns_for_range(&self, addr: Addr, n: usize) -> Vec<u32> {
         // Using get_ppn_of_base_addr to get all the ppns
         let mut ppns = HashSet::new();
@@ -215,7 +233,6 @@ impl Memory {
             .remove(&ppn)
             .ok_or(Fault::_from(FaultType::InvalidPage(ppn)))?;
         // Remove the page from the used list
-        println!("HURRAYYY");
         // Add the page back to the free list
         self.alloc_mut().push_free(page);
         Ok(())
@@ -236,6 +253,7 @@ impl Memory {
         self.alloc.free_list.len() * MEM_CTXT.page_size
     }
 
+    // Real free bytes number, accounting for inner free bytes in allocated pages (e.g., in the case of an allocation that overlaps with an existing one, which is allowed in the non-checked version of alloc)
     pub fn free_bytes_fine(&self) -> usize {
         todo!()
     }
@@ -274,7 +292,7 @@ impl Memory {
             .ok_or(Fault::_from(FaultType::InvalidPage(addr)))
     }
 
-    // Read
+    // Read at addr
     pub fn _read_at(&self, addr: Addr, len: usize) -> MemResult<Vec<Byte>> {
         self.get_page_of(addr)?.read(addr, len)
     }
@@ -413,7 +431,8 @@ impl Memory {
         }
     }
 
-    // Always push a singular byte from stack using `_push` or `_push_checked` only
+    // Allocates the page containing the given address if it's not allocated yet, to ensure that stack push/pop operations can be performed on it without causing a page fault;
+    // this is used in the push/pop operations to ensure that the stack can grow dynamically without causing page faults, by allocating new pages on demand when the stack pointer moves into a new page
     fn ensure_stack_page_allocated(&mut self, addr: Addr) -> MemResult<()> {
         if self.get_page_of(addr).is_err() {
             self.mark_pages_as_used(addr, MEM_CTXT.page_size)?; // Alloc the page at first push on the stack
@@ -422,6 +441,7 @@ impl Memory {
         Ok(())
     }
 
+    // Always push a singular byte from stack using `_push` or `_push_checked` only
     pub fn _push(&mut self, byte: Byte) -> MemResult<()> {
         self.ensure_stack_page_allocated(self.ram().stack.sp)?;
         self._write_at_addr(self.ram().stack.sp, vec![byte])?;

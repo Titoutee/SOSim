@@ -23,7 +23,7 @@ pub enum Signal {
     Fault = 7,
 }
 
-/// A single `Process` instantiated into main memory. It has its own `PageTable` and process context.
+/// A single `Process` instantiated into main memory.
 pub struct Process {
     pub pid: usize,
     pub mem: Arc<Mutex<Memory>>, // Backup reference to main memory
@@ -40,6 +40,12 @@ impl Process {
                 // println!("Debug!");
                 println!("{}", self.mem.lock().unwrap());
                 Ok(Signal::Debug)
+            }
+            DebugArea(center, zoom) => {
+                // let mem_guard = self.mem.lock().unwrap();
+                let visualizer =
+                    crate::mem::visualizer::Visualizer::new(*zoom as usize, *center as usize);
+                Ok(visualizer.visualize_art())
             }
             // Allocs and writes
             Alloc(s) => {
